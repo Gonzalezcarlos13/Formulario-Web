@@ -1,23 +1,14 @@
-import logo from './logo.svg';
+// src/App.js
+import React from 'react';
 import './App.css';
+// Importamos la página contenedora que creamos en la carpeta page
+import OrdenTrabajoPage from './page/OrdenTrabajoPage'; 
 
 function App() {
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      {/* Llamamos a la página para que se renderice en la web */}
+      <OrdenTrabajoPage />
     </div>
   );
 }
