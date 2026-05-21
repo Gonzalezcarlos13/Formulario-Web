@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Box, Grid, TextField, Typography, Button, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Select, MenuItem, FormControl, Checkbox, FormControlLabel, InputLabel
+  Select, MenuItem, FormControl, Checkbox, FormControlLabel, InputLabel, IconButton
 } from '@mui/material';
 import {
   Clear, Search, Save, Delete, Print, Close
@@ -11,14 +11,18 @@ import {
 export default function GenerarOT({ formOrden, setFormOrden }) {
   const [subTab, setSubTab] = useState(0);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    if (setFormOrden) {
-      setFormOrden(prev => ({ ...prev, [name]: value }));
-    }
-  };
+  const [servicioTexto, setServicioTexto] = useState('');
+  const [cantidadServicio, setCantidadServicio] = useState(1);
+  const [valorUnitarioServicio, setValorUnitarioServicio] = useState(0);
+  const [descServicio, setDescServicio] = useState(0);
+  const [comisionPorcServicio, setComisionPorcServicio] = useState(0);
+  const [abonadoValor, setAbonadoValor] = useState(0);
+  const netoPrevio = cantidadServicio * valorUnitarioServicio;
+  const descuentoCalculado = netoPrevio * (descServicio / 100);
+  const totalNetoLinea = Math.max(0, netoPrevio - descuentoCalculado);
+  const totalComisionLinea = totalNetoLinea * (comisionPorcServicio / 100);
 
-  const filasGrilla = [
+  const [filasGrilla, setFilasGrilla] = useState([
     {
       no: 1,
       codigo: '0000 350 3500',
@@ -30,7 +34,48 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
       comisionPorc: 0,
       comisionValue: 0
     }
-  ];
+  ]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    if (setFormOrden) {
+      setFormOrden(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleAgregarServicio = () => {
+    if (!servicioTexto.trim() || valorUnitarioServicio <= 0) return;
+
+    const nuevoServio = {
+      no: filasGrilla.length + 1,
+      codigo: 'SERV-INTERNO',
+      descripcion: servicioTexto.toUpperCase(),
+      cantidad: parseInt(cantidadServicio) || 1,
+      valorUnit: parseFloat(valorUnitarioServicio) || 0,
+      descPorc: parseFloat(descServicio) || 0,
+      subTotal: totalNetoLinea, 
+      comisionPorc: parseFloat(comisionPorcServicio) || 0,
+      comisionValue: totalComisionLinea
+    };
+
+    setFilasGrilla([...filasGrilla, nuevoServio]);
+    
+    setServicioTexto('');
+    setCantidadServicio(1);
+    setValorUnitarioServicio(0);
+    setDescServicio(0);
+    setComisionPorcServicio(0);
+  };
+
+  const handleAbonoChange = (e) => {
+    const valor = e.target.value;
+    setAbonadoValor(valor === '' ? '' : Number(valor));
+  };
+
+  const handleEjecutarAbono = () => {
+    // botón de abonar
+    alert(`Abonando: $${abonadoValor} a la OT N° ${formOrden.IdOrden || ''}`);
+  };
 
   return (
     <Box sx={{ backgroundColor: '#f0f4f8', p: 2.5, borderRadius: 2, border: '1px solid #cfd8dc' }}>
@@ -95,7 +140,6 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
           <Grid item xs={12} sm={2}>
             <TextField label="Encargado OT" size="small" fullWidth name="EncargadoOT" value={formOrden.EncargadoOT || 'POR ASIGNAR'} onChange={handleInputChange} />
           </Grid>
-          {/* Editable: Usuario Modifica */}
           <Grid item xs={12} sm={2}>
             <TextField label="Usuario Modifica" size="small" fullWidth name="UsuarioModificaOT" value={formOrden.UsuarioModificaOT || ''} onChange={handleInputChange} />
           </Grid>
@@ -138,14 +182,49 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
         </Box>
       </Box>
 
-      {/* Inputs rápidos del Producto */}
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap', p: 1.5, backgroundColor: '#eaeff1', borderRadius: 1, border: '1px solid #b0bec5' }}>
-        <Button variant="contained" size="small" sx={{ backgroundColor: '#005cb2', textTransform: 'none', fontWeight: 'bold' }}>Producto</Button>
-        <TextField size="small" placeholder="Digitar código o descripción..." sx={{ width: '280px', backgroundColor: 'white', borderRadius: 1 }} />
-        <Typography variant="body2" sx={{ color: '#37474f', fontWeight: 'bold' }}>Stock:</Typography>
-        <TextField size="small" value="15" sx={{ width: '80px', backgroundColor: '#e0e0e0', '& input': { textAlign: 'center', fontWeight: 'bold' } }} disabled />
-        <FormControlLabel control={<Checkbox defaultChecked sx={{ color: '#d32f2f', '&.Mui-checked': { color: '#d32f2f' } }} />} label={<Typography variant="body2" sx={{ color: '#d32f2f', fontWeight: 'bold' }}>Sin rebaja de stock</Typography>} />
-      </Box>
+      {subTab === 0 ? (
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap', p: 1.5, backgroundColor: '#eaeff1', borderRadius: 1, border: '1px solid #b0bec5' }}>
+          <Button variant="contained" size="small" sx={{ backgroundColor: '#005cb2', textTransform: 'none', fontWeight: 'bold' }}>Producto</Button>
+          <TextField size="small" placeholder="Digitar código o descripción..." sx={{ width: '280px', backgroundColor: 'white', borderRadius: 1 }} />
+          <Typography variant="body2" sx={{ color: '#37474f', fontWeight: 'bold' }}>Stock:</Typography>
+          <TextField size="small" value="15" sx={{ width: '80px', backgroundColor: '#e0e0e0', '& input': { textAlign: 'center', fontWeight: 'bold' } }} disabled />
+          <FormControlLabel control={<Checkbox defaultChecked sx={{ color: '#d32f2f', '&.Mui-checked': { color: '#d32f2f' } }} />} label={<Typography variant="body2" sx={{ color: '#d32f2f', fontWeight: 'bold' }}>Sin rebaja de stock</Typography>} />
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end', mb: 2, flexWrap: 'wrap', p: 2, backgroundColor: '#fffde7', borderRadius: 1.5, border: '1px solid #fff59d', boxShadow: '0px 2px 4px rgba(0,0,0,0.04)' }}>
+          <Box sx={{ flexGrow: 1, minWidth: '220px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Servicio (Texto Libre):</Typography>
+            <TextField size="small" fullWidth placeholder="Ej: MANO DE OBRA EVALUACIÓN TÉCNICA" value={servicioTexto} onChange={(e) => setServicioTexto(e.target.value)} sx={{ backgroundColor: 'white' }} />
+          </Box>
+          <Box sx={{ width: '70px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Cantidad:</Typography>
+            <TextField size="small" type="number" value={cantidadServicio} onChange={(e) => setCantidadServicio(Math.max(1, parseInt(e.target.value) || 1))} sx={{ backgroundColor: 'white' }} />
+          </Box>
+          <Box sx={{ width: '100px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Valor Unit. $:</Typography>
+            <TextField size="small" type="number" value={valorUnitarioServicio} onChange={(e) => setValorUnitarioServicio(Math.max(0, parseFloat(e.target.value) || 0))} sx={{ backgroundColor: 'white' }} />
+          </Box>
+          <Box sx={{ width: '80px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Desc. (%):</Typography>
+            <TextField size="small" type="number" value={descServicio} onChange={(e) => setDescServicio(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} sx={{ backgroundColor: 'white' }} />
+          </Box>
+          <Box sx={{ width: '110px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Total Neto $:</Typography>
+            <TextField size="small" disabled value={totalNetoLinea.toLocaleString('es-CL')} sx={{ backgroundColor: '#f5f5f5', '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: '#2e7d32', fontWeight: 'bold', textAlign: 'right' } }} />
+          </Box>
+          <Box sx={{ width: '85px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Comisión (%):</Typography>
+            <TextField size="small" type="number" value={comisionPorcServicio} onChange={(e) => setComisionPorcServicio(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} sx={{ backgroundColor: 'white' }} />
+          </Box>
+          <Box sx={{ width: '110px' }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#5d4037', display: 'block', mb: 0.5 }}>Total Comis. $:</Typography>
+            <TextField size="small" disabled value={totalComisionLinea.toLocaleString('es-CL')} sx={{ backgroundColor: '#f5f5f5', '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: '#1565c0', fontWeight: 'bold', textAlign: 'right' } }} />
+          </Box>
+          <Button variant="contained" color="warning" size="medium" onClick={handleAgregarServicio} sx={{ fontWeight: 'bold', textTransform: 'none', height: '40px', px: 2 }}>
+            Añadir Servicio
+          </Button>
+        </Box>
+      )}
 
       <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, borderColor: '#b0bec5', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)' }}>
         <Table size="small">
@@ -160,12 +239,13 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
               <TableCell align="right" sx={{ color: 'white' }}>Sub Total</TableCell>
               <TableCell align="right" sx={{ color: 'white' }}>Comisión (%)</TableCell>
               <TableCell align="right" sx={{ color: 'white' }}>Comisión ($)</TableCell>
+              <TableCell align="center" sx={{ color: 'white' }}>Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filasGrilla.map((row) => (
-              <TableRow key={row.no} sx={{ '&:nth-of-type(odd)': { backgroundColor: '#f9fbfd' }, '&:hover': { backgroundColor: '#f1f5f9' } }}>
-                <TableCell>{row.no}</TableCell>
+            {filasGrilla.map((row, index) => (
+              <TableRow key={index} sx={{ '&:nth-of-type(odd)': { backgroundColor: '#f9fbfd' }, '&:hover': { backgroundColor: '#f1f5f9' } }}>
+                <TableCell>{index + 1}</TableCell>
                 <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#37474f' }}>{row.codigo}</TableCell>
                 <TableCell>{row.descripcion}</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>{row.cantidad}</TableCell>
@@ -173,7 +253,12 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
                 <TableCell align="right">{row.descPorc}%</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold', color: '#005cb2' }}>${row.subTotal.toLocaleString('es-CL')}</TableCell>
                 <TableCell align="right">{row.comisionPorc}%</TableCell>
-                <TableCell align="right">${row.comisionValue}</TableCell>
+                <TableCell align="right">${row.comisionValue.toLocaleString('es-CL')}</TableCell>
+                <TableCell align="center">
+                  <IconButton size="small" color="error" onClick={() => setFilasGrilla(filasGrilla.filter((_, i) => i !== index))}>
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -190,8 +275,25 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
           <Box sx={{ border: '1px solid #b0bec5', p: 1, borderRadius: 1.5, backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0px 1px 3px rgba(0,0,0,0.05)' }}>
             <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#005cb2' }}>Abonado OT:</Typography>
             <Box display="flex" gap={1} alignItems="center">
-              <TextField size="small" value="0" sx={{ width: '70px', backgroundColor: '#fafafa' }} />
-              <Button variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontSize: '11px', fontWeight: 'bold' }}>Abonar $</Button>
+              <TextField 
+                size="small" 
+                type="number"
+                value={abonadoValor} 
+                onChange={handleAbonoChange}
+                onFocus={() => { if (abonadoValor === 0) setAbonadoValor(''); }}
+                onBlur={() => { if (abonadoValor === '') setAbonadoValor(0); }}
+                slotProps={{ htmlInput: { min: 0, style: { textAlign: 'right' } } }}
+                sx={{ width: '90px', backgroundColor: '#ffffff' }} 
+              />
+              <Button 
+                variant="contained" 
+                size="small" 
+                color="success" 
+                onClick={handleEjecutarAbono}
+                sx={{ textTransform: 'none', fontSize: '11px', fontWeight: 'bold' }}
+              >
+                Abonar $
+              </Button>
             </Box>
           </Box>
         </Grid>
@@ -237,9 +339,8 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
           <Button variant="contained" size="small" startIcon={<Delete />} sx={{ textTransform: 'none', backgroundColor: '#c62828', '&:hover': { backgroundColor: '#b71c1c' }, fontWeight: 'bold' }}>Anular</Button>
           <Button variant="contained" size="small" startIcon={<Print />} sx={{ textTransform: 'none', backgroundColor: '#37474f', '&:hover': { backgroundColor: '#263238' }, fontWeight: 'bold' }}>Imprimir</Button>
         </Box>
-        <Button variant="contained" size="small" startIcon={<Close />} sx={{ textTransform: 'none', backgroundColor: '#212121', '&:hover': { backgroundColor: '#000000' }, fontWeight: 'bold', px: 2 }}>X CERRAR</Button>
+        <Button variant="contained" size="small" startIcon={<Close />} sx={{ textTransform: 'none', backgroundColor: '#212121', '&:hover': { backgroundColor: '#000000' }, fontWeight: 'bold', px: 2 }}>CERRAR</Button>
       </Box>
-
     </Box>
   );
 }

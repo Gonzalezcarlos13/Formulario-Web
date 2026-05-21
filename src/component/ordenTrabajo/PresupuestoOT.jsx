@@ -8,6 +8,7 @@ import { Search, Save, Print } from '@mui/icons-material';
 export default function PresupuestoOT({ formOrden = {} }) {
   const [subTab, setSubTab] = useState(0);
 
+  // Estado local editable para manejar toda la información del formulario sin bloqueos
   const [datosPresupuesto, setDatosPresupuesto] = useState({
     IdOrden: '',
     NombreCliente: '',
@@ -34,7 +35,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
         NombreCliente: formOrden.NombreCliente || '',
         FechaIngreso: formOrden.FechaIngreso || '',
         HoraIngreso: formOrden.HoraIngreso || '',
-        FechaEntrega: formOrden.FechaIngreso || '', 
+        FechaEntrega: formOrden.FechaIngreso || '', // Inicializa con fecha disponible
         HoraEntrega: formOrden.HoraEntrega || '',
         Bodega: formOrden.Bodega || '',
         EncargadoOT: formOrden.EncargadoOT || '',
@@ -341,7 +342,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
           </Box>
         </Grid>
       </Grid>
-
     </Box>
   );
 }
