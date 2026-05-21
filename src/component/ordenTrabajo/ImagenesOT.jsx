@@ -131,10 +131,10 @@ export default function ImagenesOT({ formOrden = {} }) {
       </Box>
 
       <Grid container spacing={2}>
-        {renderUploadSlot('Imagen Frontal / General', 'img1')}
-        {renderUploadSlot('Imagen de Detalle / Falla', 'img2')}
-        {renderUploadSlot('Imagen de Componentes', 'img3')}
-        {renderUploadSlot('Imagen de Salida / Entrega', 'img4')}
+        {renderUploadSlot('Imagen 1', 'img1')}
+        {renderUploadSlot('Imagen 2 ', 'img2')}
+        {renderUploadSlot('Imagen 3', 'img3')}
+        {renderUploadSlot('Imagen 4', 'img4')}
       </Grid>
 
       <Box display="flex" justifyContent="flex-start" gap={1} sx={{ mt: 2.5, pt: 1.5, borderTop: '1px solid #b8b8b8' }}>
