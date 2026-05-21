@@ -3,7 +3,6 @@ import { Box, Grid, Typography, Button, Paper, IconButton } from '@mui/material'
 import { CloudUpload, Delete, Save, PhotoLibrary } from '@mui/icons-material';
 
 export default function ImagenesOT({ formOrden = {} }) {
-  // Estado para manejar las URLs de previsualización de las 4 imágenes
   const [imagenes, setImagenes] = useState({
     img1: null,
     img2: null,
@@ -11,7 +10,6 @@ export default function ImagenesOT({ formOrden = {} }) {
     img4: null,
   });
 
-  // para capturar el archivo seleccionado
   const handleFileChange = (slot, event) => {
     const file = event.target.files[0];
     if (file) {
@@ -20,12 +18,10 @@ export default function ImagenesOT({ formOrden = {} }) {
     }
   };
 
-  // para remover una imagen cargada
   const handleRemoveImage = (slot) => {
     setImagenes((prev) => ({ ...prev, [slot]: null }));
   };
 
-  // Renderizador de cada zona de carga (Slot)
   const renderUploadSlot = (slotLabel, slotKey) => {
     const hasImage = !!imagenes[slotKey];
 
@@ -52,7 +48,6 @@ export default function ImagenesOT({ formOrden = {} }) {
           }}
         >
           {hasImage ? (
-            /* Vista previa cuando ya hay una imagen cargada */
             <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
               <img
                 src={imagenes[slotKey]}
@@ -95,7 +90,6 @@ export default function ImagenesOT({ formOrden = {} }) {
               </Typography>
             </Box>
           ) : (
-            /* Vista inicial para invitar a subir un archivo */
             <Button
               component="label"
               sx={{
@@ -129,7 +123,6 @@ export default function ImagenesOT({ formOrden = {} }) {
   return (
     <Box sx={{ backgroundColor: '#f0f0f0', p: 2, borderRadius: 1, border: '1px solid #b0b0b0' }}>
       
-      {/* Encabezado informativo superior */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, pb: 1, borderBottom: '1px solid #b8b8b8' }}>
         <PhotoLibrary sx={{ color: '#0070d2' }} />
         <Typography variant="subtitle1" sx={{ color: '#005cb2', fontWeight: 'bold' }}>
@@ -137,7 +130,6 @@ export default function ImagenesOT({ formOrden = {} }) {
         </Typography>
       </Box>
 
-      {/* Grilla contenedora de los 4 espacios para imágenes */}
       <Grid container spacing={2}>
         {renderUploadSlot('Imagen Frontal / General', 'img1')}
         {renderUploadSlot('Imagen de Detalle / Falla', 'img2')}
@@ -145,7 +137,6 @@ export default function ImagenesOT({ formOrden = {} }) {
         {renderUploadSlot('Imagen de Salida / Entrega', 'img4')}
       </Grid>
 
-      {/* Barra de control inferior unificada con la estética del software */}
       <Box display="flex" justifyContent="flex-start" gap={1} sx={{ mt: 2.5, pt: 1.5, borderTop: '1px solid #b8b8b8' }}>
         <Button
           startIcon={<Save />}

@@ -1,4 +1,3 @@
-// src/component/ordenTrabajo/GenerarOT.jsx
 import React, { useState } from 'react';
 import {
   Box, Grid, TextField, Typography, Button, Tabs, Tab,
@@ -12,7 +11,6 @@ import {
 export default function GenerarOT({ formOrden, setFormOrden }) {
   const [subTab, setSubTab] = useState(0);
 
-  // Manejador local básico en caso de que necesites testear la escritura directamente
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     if (setFormOrden) {
@@ -36,22 +34,18 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
 
   return (
     <Box sx={{ backgroundColor: '#f0f4f8', p: 2.5, borderRadius: 2, border: '1px solid #cfd8dc' }}>
-      
-      {/* ================= SECCIÓN 1: IDENTIFICACIÓN PRINCIPAL Y TIEMPOS ================= */}
+
       <Box sx={{ backgroundColor: '#ffffff', p: 2, borderRadius: 1.5, boxShadow: '0px 2px 4px rgba(0,0,0,0.06)', mb: 2, border: '1px solid #e0e6ed' }}>
         <Typography variant="subtitle2" sx={{ color: '#005cb2', fontWeight: 'bold', mb: 1.5, borderBottom: '2px solid #005cb2', pb: 0.5, display: 'inline-block' }}>
           Datos de Identificación y Tiempos
         </Typography>
         <Grid container spacing={2}>
-          {/* Editable: Cliente (pueden buscarlo o digitarlo) */}
           <Grid item xs={12} sm={4}>
             <TextField label="Cliente" size="small" fullWidth name="NombreCliente" value={formOrden.NombreCliente || ''} onChange={handleInputChange} variant="outlined" sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#fafafa' } }} />
           </Grid>
-          {/* Editable: Sucursal */}
           <Grid item xs={12} sm={2}>
             <TextField label="Sucursal" size="small" fullWidth name="Sucursal" value={formOrden.Sucursal || 'INTERNA'} onChange={handleInputChange} variant="outlined" />
           </Grid>
-          {/* Editable: Fechas e Ingresos */}
           <Grid item xs={12} sm={2}>
             <TextField label="Ingreso OT" size="small" fullWidth name="FechaIngreso" value={formOrden.FechaIngreso || ''} onChange={handleInputChange} variant="outlined" />
           </Grid>
@@ -62,21 +56,17 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
             <TextField label="Hora Entrega" size="small" fullWidth name="HoraEntrega" value={formOrden.HoraEntrega || ''} onChange={handleInputChange} variant="outlined" />
           </Grid>
 
-          {/* Editable: Bodega */}
           <Grid item xs={12} sm={3}>
             <TextField label="Bodega" size="small" fullWidth name="Bodega" value={formOrden.Bodega || 'INTERNA'} onChange={handleInputChange} variant="outlined" />
           </Grid>
-          {/* Editable: Fecha Real */}
           <Grid item xs={12} sm={3}>
             <TextField label="Fecha Real Entrega OT" size="small" fullWidth name="FechaRealEntrega" value={formOrden.FechaRealEntrega || ''} onChange={handleInputChange} variant="outlined" />
           </Grid>
-          {/* Desatacar con color sutil: Hora término */}
           <Grid item xs={12} sm={2}>
             <TextField label="Hora Término" size="small" fullWidth name="HoraTermino" value={formOrden.HoraTermino || '00:00'} onChange={handleInputChange} variant="outlined" 
               sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#e8f5e9', '& fieldset': { borderColor: '#a5d6a7' } } }}
             />
           </Grid>
-          {/* Destacar con color sutil: Fecha aprox */}
           <Grid item xs={12} sm={4}>
             <TextField label="Fecha Entrega Cotización Aprox." size="small" fullWidth name="FechaEntregaCotizacionAprox" value={formOrden.FechaEntregaCotizacionAprox || ''} onChange={handleInputChange} variant="outlined"
               sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#ffebee', '& fieldset': { borderColor: '#ef9a9a' } }, '& .MuiInputLabel-root': { color: '#c62828' } }}
@@ -85,7 +75,6 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
         </Grid>
       </Box>
 
-      {/* ================= SECCIÓN 2: CONTROL INTERNO Y ESTADO ================= */}
       <Box sx={{ backgroundColor: '#ffffff', p: 2, borderRadius: 1.5, boxShadow: '0px 2px 4px rgba(0,0,0,0.06)', mb: 2, border: '1px solid #e0e6ed' }}>
         <Typography variant="subtitle2" sx={{ color: '#005cb2', fontWeight: 'bold', mb: 1.5, borderBottom: '2px solid #005cb2', pb: 0.5, display: 'inline-block' }}>
           Gestión Interna
@@ -97,15 +86,12 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
             </Button>
             <Checkbox size="small" defaultChecked />
           </Grid>
-          {/* El número de la OT suele ser correlativo automático (Lectura de preferencia, pero habilitado por si acaso) */}
           <Grid item xs={12} sm={1.5}>
             <TextField label="Número OT" size="small" fullWidth name="IdOrden" value={formOrden.IdOrden || ''} onChange={handleInputChange} sx={{ '& input': { fontWeight: 'bold', textAlign: 'center', color: '#005cb2' }, '& .MuiOutlinedInput-root': { backgroundColor: '#fcfcfc' } }} />
           </Grid>
-          {/* Editable: Nota de venta */}
           <Grid item xs={12} sm={2}>
             <TextField label="N° Nota de Venta" size="small" fullWidth name="NroNotaVenta" value={formOrden.NroNotaVenta || ''} onChange={handleInputChange} />
           </Grid>
-          {/* Editable: Encargado */}
           <Grid item xs={12} sm={2}>
             <TextField label="Encargado OT" size="small" fullWidth name="EncargadoOT" value={formOrden.EncargadoOT || 'POR ASIGNAR'} onChange={handleInputChange} />
           </Grid>
@@ -113,12 +99,10 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
           <Grid item xs={12} sm={2}>
             <TextField label="Usuario Modifica" size="small" fullWidth name="UsuarioModificaOT" value={formOrden.UsuarioModificaOT || ''} onChange={handleInputChange} />
           </Grid>
-          {/* Editable: Vendedor */}
           <Grid item xs={12} sm={2}>
             <TextField label="Vendedor" size="small" fullWidth name="Vendedor" value={formOrden.Vendedor || 'PAUL CELERY'} onChange={handleInputChange} />
           </Grid>
 
-          {/* Seleccionable: Estado OT */}
           <Grid item xs={12} sm={3}>
             <FormControl size="small" fullWidth>
               <InputLabel>Estado OT</InputLabel>
@@ -134,18 +118,15 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
               Referencias DTE
             </Button>
           </Grid>
-          {/* Editable: Observaciones */}
           <Grid item xs={12} sm={4.5}>
             <TextField label="Observaciones" size="small" fullWidth multiline rows={1} name="Observaciones" value={formOrden.Observaciones || ''} onChange={handleInputChange} sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#fffde7' } }} />
           </Grid>
-          {/* Editable: Orden de compra */}
           <Grid item xs={12} sm={3}>
             <TextField label="Ingreso Orden de Compra" size="small" fullWidth name="IngresoOrdenCompra" value={formOrden.IngresoOrdenCompra || ''} onChange={handleInputChange} />
           </Grid>
         </Grid>
       </Box>
 
-      {/* ================= SECCIÓN 3: SUB-PESTAÑAS DE SELECCIÓN ================= */}
       <Box sx={{ borderBottom: 1, borderColor: '#b0bec5', mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#cfd8dc', px: 1, borderRadius: '4px 4px 0 0' }}>
         <Tabs value={subTab} onChange={(e, v) => setSubTab(v)} sx={{ minHeight: '38px' }}>
           <Tab label="Productos" sx={{ textTransform: 'none', fontWeight: 'bold', minHeight: '38px', '&.Mui-selected': { color: '#005cb2' } }} />
@@ -166,7 +147,6 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
         <FormControlLabel control={<Checkbox defaultChecked sx={{ color: '#d32f2f', '&.Mui-checked': { color: '#d32f2f' } }} />} label={<Typography variant="body2" sx={{ color: '#d32f2f', fontWeight: 'bold' }}>Sin rebaja de stock</Typography>} />
       </Box>
 
-      {/* ================= SECCIÓN 4: TABLA PRINCIPAL ================= */}
       <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, borderColor: '#b0bec5', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)' }}>
         <Table size="small">
           <TableHead>
@@ -200,7 +180,6 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
         </Table>
       </TableContainer>
 
-      {/* ================= SECCIÓN 5: TOTALES Y RECAUDACIÓN ================= */}
       <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
         <Grid item xs={12} sm={3.5} display="flex" gap={1} alignItems="center">
           <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '110px', color: '#37474f' }}>Usuario crea OT:</Typography>
@@ -217,7 +196,6 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
           </Box>
         </Grid>
 
-        {/* Bloque ordenado de Totales */}
         <Grid item xs={12} sm={5} display="flex" justifyContent="flex-end">
           <Paper variant="outlined" sx={{ p: 1.5, backgroundColor: '#e1f5fe', borderColor: '#b3e5fc', width: '100%', boxShadow: '0px 2px 4px rgba(0,0,0,0.04)' }}>
             <Grid container spacing={1}>
@@ -251,7 +229,6 @@ export default function GenerarOT({ formOrden, setFormOrden }) {
         </Grid>
       </Grid>
 
-      {/* ================= BOTONERA INFERIOR ACCIONES ================= */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, pt: 2, borderTop: '2px solid #b0bec5' }}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button variant="contained" size="small" startIcon={<Clear />} sx={{ textTransform: 'none', backgroundColor: '#78909c', '&:hover': { backgroundColor: '#607d8b' }, fontWeight: 'bold' }}>Limpiar</Button>

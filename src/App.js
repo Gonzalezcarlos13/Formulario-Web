@@ -1,4 +1,3 @@
-// src/App.js
 import React from 'react';
 import './App.css';
 // Importamos la página contenedora que creamos en la carpeta page

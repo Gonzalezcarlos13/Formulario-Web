@@ -1,4 +1,3 @@
-// src/component/ordenTrabajo/PresupuestoOT.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Box, Grid, TextField, Typography, Button, Tabs, Tab,
@@ -9,7 +8,6 @@ import { Search, Save, Print } from '@mui/icons-material';
 export default function PresupuestoOT({ formOrden = {} }) {
   const [subTab, setSubTab] = useState(0);
 
-  // Estado local editable para manejar toda la información del formulario sin bloqueos
   const [datosPresupuesto, setDatosPresupuesto] = useState({
     IdOrden: '',
     NombreCliente: '',
@@ -20,17 +18,14 @@ export default function PresupuestoOT({ formOrden = {} }) {
     Bodega: '',
     EncargadoOT: '',
     Observaciones: '',
-    // Campos para la sección de Detalles Insumos
     InsumoBodega: '',
     InsumoProducto: '',
     InsumoCantidad: '',
-    // Valores monetarios editables de recaudación
     Neto: 0,
     Iva: 0,
     Total: 0
   });
 
-  // Sincronizar el estado editable cuando cambia el DTO principal desde el formulario padre
   useEffect(() => {
     if (formOrden) {
       setDatosPresupuesto((prev) => ({
@@ -39,7 +34,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
         NombreCliente: formOrden.NombreCliente || '',
         FechaIngreso: formOrden.FechaIngreso || '',
         HoraIngreso: formOrden.HoraIngreso || '',
-        FechaEntrega: formOrden.FechaIngreso || '', // Inicializa con fecha disponible
+        FechaEntrega: formOrden.FechaIngreso || '', 
         HoraEntrega: formOrden.HoraEntrega || '',
         Bodega: formOrden.Bodega || '',
         EncargadoOT: formOrden.EncargadoOT || '',
@@ -48,7 +43,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
     }
   }, [formOrden]);
 
-  // Manejador genérico para actualizar dinámicamente cualquier campo modificado
   const handleChange = (campo, valor) => {
     setDatosPresupuesto((prev) => ({
       ...prev,
@@ -56,7 +50,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
     }));
   };
 
-  // Fila de la grilla principal superior (simulando los datos cargados)
   const filasGrillaSuperior = [
     {
       codigo: '0000 350 3500',
@@ -72,12 +65,9 @@ export default function PresupuestoOT({ formOrden = {} }) {
 
   return (
     <Box sx={{ backgroundColor: '#f0f0f0', p: 1.5, borderRadius: 1, border: '1px solid #b0b0b0' }}>
-      
-      {/* ================= SECCIÓN 1: CABECERA GRIS SUPERIOR (DATOS EDITABLES) ================= */}
       <Box sx={{ backgroundColor: '#dcdcdc', p: 1.5, borderRadius: 1, border: '1px solid #b8b8b8', mb: 1.5 }}>
         <Grid container spacing={1} alignItems="center">
           
-          {/* Número OT */}
           <Grid item xs={12} sm={3} display="flex" alignItems="center">
             <Typography variant="caption" sx={{ backgroundColor: '#0070d2', color: 'white', px: 1, py: 0.5, fontWeight: 'bold', minWidth: '100px', textAlign: 'center', fontSize: '11px' }}>
               Número O.T.:
@@ -91,7 +81,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
             />
           </Grid>
 
-          {/* Cliente */}
           <Grid item xs={12} sm={6} display="flex" alignItems="center">
             <Typography variant="caption" sx={{ backgroundColor: '#0070d2', color: 'white', px: 1, py: 0.5, fontWeight: 'bold', minWidth: '100px', textAlign: 'center', fontSize: '11px' }}>
               Cliente:
@@ -111,7 +100,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
             </Button>
           </Grid>
 
-          {/* Bloque de Fechas, Horas y Asignaciones (Todos Editables) */}
           <Grid item xs={12} sm={6}>
             <Grid container spacing={1}>
               
@@ -160,7 +148,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
             </Grid>
           </Grid>
 
-          {/* Cuadro de Texto de Observaciones Libre */}
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
@@ -175,7 +162,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
         </Grid>
       </Box>
 
-      {/* ================= SECCIÓN 2: TABLA PRINCIPAL SUPERIOR ================= */}
       <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, borderColor: '#b8b8b8', maxHeight: '120px' }}>
         <Table size="small" stickyHeader>
           <TableHead>
@@ -209,14 +195,12 @@ export default function PresupuestoOT({ formOrden = {} }) {
         </Table>
       </TableContainer>
 
-      {/* ================= SECCIÓN 3: DETALLES INSUMOS (CAMPOS ABIERTOS PARA ESCRIBIR) ================= */}
       <Box sx={{ border: '1px solid #b8b8b8', p: 1, borderRadius: 1, backgroundColor: '#e0e0e0' }}>
         <Typography variant="caption" sx={{ color: '#000080', fontWeight: 'bold', display: 'block', mb: 0.5, fontSize: '12px' }}>
           Detalles Insumos
         </Typography>
         
         <Grid container spacing={1.5}>
-          {/* Columna Izquierda: Formulario Manual de Selección */}
           <Grid item xs={12} sm={5.5}>
             <Box sx={{ backgroundColor: '#f0f0f0', border: '1px solid #b8b8b8', borderRadius: 1, p: 1 }}>
               
@@ -255,7 +239,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
                 </Grid>
               </Grid>
 
-              {/* Renglon de Stock y Cantidades con Input activo */}
               <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#b8b8b8', mb: 2 }}>
                 <Table size="small">
                   <TableHead>
@@ -293,7 +276,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
             </Box>
           </Grid>
 
-          {/* Columna Derecha: Tabla Secundaria */}
           <Grid item xs={12} sm={6.5}>
             <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#b8b8b8', height: '100%', minHeight: '185px', backgroundColor: '#a0a0a0' }}>
               <Table size="small" stickyHeader>
@@ -319,7 +301,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
         </Grid>
       </Box>
 
-      {/* ================= SECCIÓN 4: ACCIONES Y TOTALES DE RECAUDACIÓN EDITABLES ================= */}
       <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
         <Grid item xs={12} sm={7} display="flex" gap={0.5}>
           <Button startIcon={<Search />} variant="contained" size="small" sx={{ backgroundColor: '#e0e0e0', color: 'black', border: '1px solid #999', textTransform: 'none', fontSize: '11px', fontWeight: 'bold' }}>Buscar</Button>
@@ -328,7 +309,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
           <Button startIcon={<Print />} variant="contained" size="small" sx={{ backgroundColor: '#e0e0e0', color: 'black', border: '1px solid #999', textTransform: 'none', fontSize: '11px', fontWeight: 'bold' }}>Imprimir</Button>
         </Grid>
 
-        {/* Bloque Final de Totales habilitados para escritura o modificaciones manuales */}
         <Grid item xs={12} sm={5}>
           <Box display="flex" flexDirection="column" gap={0.5} alignItems="flex-end">
             <Box display="flex" alignItems="center" gap={1}>
