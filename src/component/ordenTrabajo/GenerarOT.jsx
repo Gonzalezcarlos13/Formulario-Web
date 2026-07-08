@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Box, Checkbox, FormControlLabel, TextField, Button, Typography, Tabs, Tab, MenuItem, Select, IconButton 
-} from '@mui/material';
+import { Box, Checkbox, FormControlLabel, TextField, Button, Typography, Tabs, Tab, MenuItem, Select, IconButton } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -9,29 +7,175 @@ import SaveIcon from '@mui/icons-material/Save';
 import BlockIcon from '@mui/icons-material/Block';
 import PrintIcon from '@mui/icons-material/Print';
 
-export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
+import OrdenTrabajoServicio from '../../apiservicios/servicio.ordentrabajo';
+import DTODetalleOrden from "../../dto/DTODetalleOrden.js"
+import DTOImagenOrden from "../../dto/DTOImagenOrden.js"
+
+
+
+export default function GenerarOT({ valores = {}, handleChange = () => { }, limpiarValores = () => { } }) {
   const [subTab, setSubTab] = useState(0);
+
+  const [detalles, setdetalles] = useState([
+  {
+    "IdDetalle": "101",
+    "Idorden": "12018",
+    "IdTipo": "1",
+    "Codigo": "SERV-MANT",
+    "Descripcion": "MANO DE OBRA MANTENIMIENTO GENERAL",
+    "Cantidad": "1",
+    "ValorUnitario": "35000",
+    "DescuentoPorcentaje": "0",
+    "SubTotal": "35000"
+  },
+  {
+    "IdDetalle": "102",
+    "Idorden": "12018",
+    "IdTipo": "2",
+    "Codigo": "REP-FILT01",
+    "Descripcion": "FILTRO DE AIRE INDUSTRIAL TIPO A",
+    "Cantidad": "2",
+    "ValorUnitario": "6450",
+    "DescuentoPorcentaje": "0",
+    "SubTotal": "12900"
+  }
+]);
+
+const [imagenes, setimagenes] = useState([
+  {
+    "IdImagen": "5001",
+    "Idorden": "12018",
+    "RutaImagen": "https://tu-servidor.com/uploads/orden_12018_antes.jpg"
+  },
+  {
+    "IdImagen": "5002",
+    "Idorden": "12018",
+    "RutaImagen": "https://tu-servidor.com/uploads/orden_12018_despues.jpg"
+  }
+]);
+
+
+
+
+  const GuardarOrden = async () => {
+    try {
+      console.log("Enviando cabecera de la orden...", valores);
+
+      // Enviamos SOLO los datos de la cabecera (valores) 
+
+       var datos = {
+          "Cabecera": valores, 
+          "Detalles": (detalles || []).map(d => new DTODetalleOrden(d)),
+          "Imagenes": (imagenes || []).map(d => new DTOImagenOrden(d))
+      };
+
+      const response = await OrdenTrabajoServicio.CreateOrdenTrabajo(datos);
+      
+      // 2. Capturamos el ID de forma flexible según cómo responda(.id, .IdOrden o el texto directo)
+      const idOT = response?.Id ;
+      alert(`¡Orden de Trabajo guardada correctamente! ID OT: ${idOT || valores.IdOrden}`);
+    } catch (error) {
+      console.error('Error al guardar la orden:', error);
+      alert(`Error al guardar la orden: ${error.message || 'Problema en el servidor'}`);
+    }
+  };
+
+  const LimpiarFormulario = () => {
+    setdetalles([]);
+    setimagenes([]);
+    setSubTab(0);
+
+    const emptyVal = '';
+    const fieldsToClear = [
+      'NombreCliente', 'Sucursal', 'FechaIngreso',
+      'HoraIngreso', 'HoraEntrega', 'Bodega',
+      'FechaRealEntrega', 'HoraTermino', 'FechaEntregaCotiz',
+      'IdOrden', 'NroNotaVenta', 'EncargadoOT',
+      'UsuarioModifica', 'Vendedor', 'Observaciones',
+      'SubTotal', 'TotalNeto', 'DescuentoPorc',
+      'TotalIVA', 'DescuentoS', 'TotalOT'
+    ];
+    fieldsToClear.forEach((key) => {
+      if (handleChange) handleChange(key, emptyVal);
+    });
+
+    if (limpiarValores) limpiarValores();
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      
+
       {/* SECCIÓN 1: DATOS DE IDENTIFICACIÓN Y TIEMPOS */}
       <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', p: 2.5, pt: 2, position: 'relative', backgroundColor: '#fff' }}>
         <Typography variant="body2" sx={{ position: 'absolute', top: '-10px', left: '15px', backgroundColor: '#fff', px: 1, color: '#005cb2', fontWeight: 'bold', fontSize: '12px' }}>
           Datos de Identificación y Tiempos
         </Typography>
-        
+
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 2, mt: 0.5 }}>
           <TextField label="Cliente" size="small" value={valores.NombreCliente || ''} onChange={(e) => handleChange('NombreCliente', e.target.value)} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> } }} sx={{ gridColumn: 'span 3' }} />
           <TextField label="Sucursal" size="small" value={valores.Sucursal || ''} onChange={(e) => handleChange('Sucursal', e.target.value)} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> } }} sx={{ gridColumn: 'span 2' }} />
-          <TextField label="Ingreso OT" type="date" size="small" value={valores.FechaIngreso || ''} onChange={(e) => handleChange('FechaIngreso', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 2' }} />
-          <TextField label="Hora Ingreso" type="time" size="small" value={valores.HoraIngreso || ''} onChange={(e) => handleChange('HoraIngreso', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 1.5' }} />
-          <TextField label="Hora Entrega" type="time" size="small" value={valores.HoraEntrega || ''} onChange={(e) => handleChange('HoraEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 1.5' }} />
-          <TextField label="Bodega" size="small" value={valores.Bodega || ''} onChange={(e) => handleChange('Bodega', e.target.value)} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> } }} sx={{ gridColumn: 'span 2' }} />
           
-          <TextField label="Fecha Real Entrega OT" type="date" size="small" value={valores.FechaRealEntrega || ''} onChange={(e) => handleChange('FechaRealEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 3' }} />
-          <TextField label="Hora Término OT" type="time" size="small" value={valores.HoraTermino || '00:00'} onChange={(e) => handleChange('HoraTermino', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ backgroundColor: '#f4fbf4', gridColumn: 'span 2' }} />
-          <TextField label="Fecha Entrega Cotización Aproximadamente" type="date" size="small" value={valores.FechaEntregaCotiz || ''} onChange={(e) => handleChange('FechaEntregaCotiz', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ '& .MuiInputLabel-root': { color: 'red' }, gridColumn: 'span 4' }} />
+          <TextField 
+            label="Ingreso OT" 
+            type="date" 
+            size="small" 
+            value={valores.FechaIngreso || ''} 
+            onChange={(e) => handleChange('FechaIngreso', e.target.value)} 
+            slotProps={{ inputLabel: { shrink: true } }} 
+            sx={{ gridColumn: 'span 2' }} 
+          />
+          
+          <TextField 
+            label="Hora Ingreso" 
+            type="time" 
+            size="small" 
+            value={valores.HoraIngreso || ''} 
+            onChange={(e) => handleChange('HoraIngreso', e.target.value)} 
+            slotProps={{ inputLabel: { shrink: true } }} 
+            sx={{ gridColumn: 'span 1.5' }} 
+          />
+          
+          <TextField 
+            label="Hora Entrega" 
+            type="time" 
+            size="small" 
+            value={valores.HoraEntrega || ''} 
+            onChange={(e) => handleChange('HoraEntrega', e.target.value)} 
+            slotProps={{ inputLabel: { shrink: true } }} 
+            sx={{ gridColumn: 'span 1.5' }} 
+          />
+          
+          <TextField label="Bodega" size="small" value={valores.Bodega || ''} onChange={(e) => handleChange('Bodega', e.target.value)} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> } }} sx={{ gridColumn: 'span 2' }} />
+
+          <TextField 
+            label="Fecha Real Entrega OT" 
+            type="date" 
+            size="small" 
+            value={valores.FechaRealEntrega || ''} 
+            onChange={(e) => handleChange('FechaRealEntrega', e.target.value)} 
+            slotProps={{ inputLabel: { shrink: true } }} 
+            sx={{ gridColumn: 'span 3' }} 
+          />
+          
+          <TextField 
+            label="Hora Término OT" 
+            type="time" 
+            size="small" 
+            value={valores.HoraTermino || ''} 
+            onChange={(e) => handleChange('HoraTermino', e.target.value)} 
+            slotProps={{ inputLabel: { shrink: true } }} 
+            sx={{ backgroundColor: '#f4fbf4', gridColumn: 'span 2' }} 
+          />
+          
+          <TextField 
+            label="Fecha Entrega Cotización Aproximadamente" 
+            type="date" 
+            size="small" 
+            value={valores.FechaEntregaCotizacionAprox || ''} 
+            onChange={(e) => handleChange('FechaEntregaCotizacionAprox', e.target.value)} 
+            slotProps={{ inputLabel: { shrink: true } }} 
+            sx={{ gridColumn: 'span 4' }} 
+          />
         </Box>
       </Box>
 
@@ -40,7 +184,7 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
         <Typography variant="body2" sx={{ position: 'absolute', top: '-10px', left: '15px', backgroundColor: '#fff', px: 1, color: '#005cb2', fontWeight: 'bold', fontSize: '12px' }}>
           Gestión Interna
         </Typography>
-        
+
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 2, mt: 0.5, alignItems: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, gridColumn: 'span 2' }}>
             <Button variant="contained" size="small" sx={{ textTransform: 'none', backgroundColor: '#0066cc', minWidth: '95px', fontSize: '11px', px: 1 }}>Cambiar N° OT</Button>
@@ -48,13 +192,13 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
           </Box>
           <TextField label="Número OT" size="small" value={valores.IdOrden || ''} onChange={(e) => handleChange('IdOrden', e.target.value)} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#0066cc', textAlign: 'center' }, gridColumn: 'span 1.5' }} />
           <TextField label="N° Nota de Venta" size="small" value={valores.NroNotaVenta || ''} onChange={(e) => handleChange('NroNotaVenta', e.target.value)} sx={{ gridColumn: 'span 1.5' }} />
-          <TextField label="Encargado OT" size="small" value={valores.EncargadoOT || ''} onChange={(e) => handleChange('EncargadoOT', e.target.value)} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> } }} sx={{ gridColumn: 'span 2.5' }} />
-          <TextField label="Usuario Modifica" size="small" value={valores.UsuarioModifica || '--'} slotProps={{ input: { readOnly: true } }} sx={{ gridColumn: 'span 1.5' }} />
-          <TextField label="Vendedor" size="small" value={valores.Vendedor || ''} onChange={(e) => handleChange('Vendedor', e.target.value)} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> } }} sx={{ gridColumn: 'span 2' }} />
-          
-          <Box sx={{ display: 'flex', flexDirection: 'column', gridColumn: 'span 1.5' }}>
+          <TextField label="Encargado OT" size="small" value={valores.EncargadoOT || ''} onChange={(e) => handleChange('EncargadoOT', e.target.value)} InputProps={{ endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> }} sx={{ gridColumn: 'span 2.5' }} />
+          <TextField label="Usuario Modifica" size="small" value={valores.UsuarioModifica || '--'} InputProps={{ readOnly: true }} sx={{ gridColumn: 'span 1.5' }} />
+          <TextField label="Vendedor" size="small" value={valores.Vendedor || ''} onChange={(e) => handleChange('Vendedor', e.target.value)} InputProps={{ endAdornment: <SearchIcon sx={{ color: '#0066cc', cursor: 'pointer' }} /> }} sx={{ gridColumn: 'span 2' }} />
+
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gridColumn: 'span 1.5' }}>
             <Typography variant="caption" sx={{ ml: 0.5, color: 'text.secondary', fontSize: '10px' }}>Estado OT</Typography>
-            <Select size="small" value={valores.EstadoOT || 'MANTENIMIENTO'} onChange={(e) => handleChange('EstadoOT', e.target.value)} sx={{ height: '38px' }}>
+            <Select size="small" value={valores.EstadoOT || 'MANTENIMIENTO'} onChange={(e) => handleChange('EstadoOT', e.target.value)} sx={{ height: '38px', width: '100%' }}>
               <MenuItem value="MANTENIMIENTO">MANTENIMIENTO</MenuItem>
               <MenuItem value="APROBADO">APROBADO</MenuItem>
               <MenuItem value="RECHAZADO">RECHAZADO</MenuItem>
@@ -63,14 +207,14 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
 
           <Button variant="outlined" size="medium" sx={{ textTransform: 'none', height: '38px', gridColumn: 'span 2', fontSize: '12px' }}>Referencias DTE</Button>
           <TextField label="Ingreso Orden de Compra" size="small" value={valores.IngresoOrdenCompra || ''} onChange={(e) => handleChange('IngresoOrdenCompra', e.target.value)} sx={{ gridColumn: 'span 3' }} />
-          
+
           <Box sx={{ gridColumn: '1 / -1', mt: 0.5 }}>
             <TextField label="Observaciones" size="small" fullWidth multiline rows={1.5} value={valores.Observaciones || ''} onChange={(e) => handleChange('Observaciones', e.target.value)} sx={{ backgroundColor: '#fffbe6' }} />
           </Box>
         </Box>
       </Box>
 
-      {/* SECCIÓN 3: TABLA DE PRODUCTOS / SERVICIOS (INTERACTIVA) */}
+      {/* SECCIÓN 3: TABLA DE PRODUCTOS / SERVICIOS */}
       <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', backgroundColor: '#eaeff4', overflow: 'hidden' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#cfd8dc', px: 2, py: 0.5 }}>
           <Tabs value={subTab} onChange={(e, val) => setSubTab(val)} sx={{ minHeight: '36px', '& .MuiTab-root': { minHeight: '36px', py: 0.5, fontSize: '13px' } }}>
@@ -85,14 +229,12 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
           </Box>
         </Box>
 
-        {/* CONTENIDO VARIABLE SEGÚN LA PESTAÑA ELEGIDA */}
         {subTab === 0 ? (
-          /* FORMULARIO DE INGRESO PARA PRODUCTOS */
           <Box sx={{ p: 1.5, display: 'flex', gap: 1.5, alignItems: 'center', backgroundColor: '#f5f5f5', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0' }}>
             <TextField label="Producto" size="small" sx={{ width: '35%', backgroundColor: '#fff' }} slotProps={{ input: { endAdornment: <SearchIcon sx={{ color: '#0066cc' }} /> } }} />
             <TextField label="Stock" size="small" value="15" slotProps={{ input: { readOnly: true } }} sx={{ width: '65px', backgroundColor: '#e0e0e0' }} />
             <FormControlLabel control={<Checkbox defaultChecked color="error" size="small" />} label={<Typography variant="caption" sx={{ color: 'red', fontWeight: 'bold' }}>Sin rebaja de stock</Typography>} />
-            
+
             <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, mt: 0.5 }}>
               {['Cantidad', 'Valor Neto', 'Descto.(%)', 'Total Neto', 'Comisión (%)', 'Total Comisión ($)'].map((h) => (
                 <TextField key={h} label={h} size="small" sx={{ backgroundColor: '#fff' }} />
@@ -100,17 +242,8 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
             </Box>
           </Box>
         ) : (
-          /* FORMULARIO DE INGRESO PARA SERVICIOS (Texto libre con fondo amarillo) */
           <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5, backgroundColor: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
-            <TextField 
-              label="Servicio (texto libre)" 
-              size="small" 
-              fullWidth 
-              multiline 
-              rows={2} 
-              sx={{ backgroundColor: '#fffbe6' }} 
-              placeholder="Escribe la descripción del servicio técnico aquí..."
-            />
+            <TextField label="Servicio (texto libre)" size="small" fullWidth multiline rows={2} sx={{ backgroundColor: '#fffbe6' }} placeholder="Escribe la descripción del servicio técnico aquí..." />
             <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1 }}>
               {['Cantidad', 'Valor Unitario $', 'Descuento (%)', 'Total Neto $', 'Comisión (%)'].map((h) => (
                 <TextField key={h} label={h} size="small" sx={{ backgroundColor: '#fff' }} />
@@ -119,7 +252,6 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
           </Box>
         )}
 
-        {/* TABLA PRINCIPAL DE REGISTROS (Muestra los ítems añadidos) */}
         <Box sx={{ overflowX: 'auto', backgroundColor: '#fff' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif', fontSize: '12px' }}>
             <thead>
@@ -156,7 +288,7 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
         </Box>
       </Box>
 
-      {/* PIE DE PANEL */}
+      {/* PIE DE PANEL Y TOTALES */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 3, mt: 0.5, flexWrap: 'wrap-reverse' }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: '400px' }}>
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
@@ -167,21 +299,20 @@ export default function GenerarOT({ valores = {}, handleChange = () => {} }) {
               <Button variant="contained" color="success" size="small" sx={{ textTransform: 'none', py: 0.1, px: 1, fontSize: '11px' }}>Abonar $</Button>
             </Box>
           </Box>
-          
+
           <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic', pl: 0.5, fontSize: '11px' }}>
             * Presione F5 para ingresar las series de los productos / Presione F6 para buscar productos por series.
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-            <Button variant="contained" size="small" sx={{ backgroundColor: '#78909c', textTransform: 'none', fontSize: '12px' }} startIcon={<ClearIcon />}>Limpiar</Button>
             <Button variant="contained" size="small" sx={{ backgroundColor: '#1976d2', textTransform: 'none', fontSize: '12px' }} startIcon={<SearchIcon />}>Buscar</Button>
-            <Button variant="contained" size="small" sx={{ backgroundColor: '#2e7d32', textTransform: 'none', fontSize: '12px' }} startIcon={<SaveIcon />}>Grabar</Button>
+            <Button variant="outlined" size="small" sx={{ backgroundColor: '#757575', textTransform: 'none', fontSize: '12px' }} startIcon={<ClearIcon />} onClick={LimpiarFormulario}>Limpiar</Button>
+            <Button variant="contained" size="small" sx={{ backgroundColor: '#2e7d32', textTransform: 'none', fontSize: '12px' }} startIcon={<SaveIcon />} onClick={GuardarOrden}>Grabar</Button>
             <Button variant="contained" size="small" sx={{ backgroundColor: '#d32f2f', textTransform: 'none', fontSize: '12px' }} startIcon={<BlockIcon />}>Anular</Button>
             <Button variant="contained" size="small" sx={{ backgroundColor: '#37474f', textTransform: 'none', fontSize: '12px' }} startIcon={<PrintIcon />}>Imprimir</Button>
           </Box>
         </Box>
 
-        {/* Matriz de Totales */}
         <Box sx={{ border: '1px solid #ccc', borderRadius: '6px', p: 1.5, backgroundColor: '#f8fafc', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5, flexGrow: 1, maxWidth: '650px' }}>
           <TextField label="Sub Total $" size="small" value={valores.SubTotal || '0'} slotProps={{ input: { readOnly: true } }} />
           <TextField label="Total Neto $" size="small" value={valores.TotalNeto || '0'} slotProps={{ input: { readOnly: true } }} />

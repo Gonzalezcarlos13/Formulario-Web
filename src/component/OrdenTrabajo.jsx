@@ -12,30 +12,39 @@ export default function OrdenTrabajo() {
   const [activeTab, setActiveTab] = useState(0);
 
   // Estado único centralizado
-  const [valores, setValores] = useState({
-    IdOrden: '12018',
-    NombreCliente: 'BLANCA ESTER BAHAMONDE PAREDES',
-    Sucursal: 'INTERNA',
-    FechaIngreso: '2026-06-05', 
-    HoraIngreso: '14:54',
-    HoraEntrega: '14:54',
-    Bodega: 'INTERNA',
-    EncargadoOT: 'POR ASIGNAR',
-    Vendedor: 'PAUL CELERY',
-    EstadoOT: 'MANTENIMIENTO',
-    Observaciones: '',
-    NroNotaVenta: '',
-    UsuarioModifica: '--',
-    IngresoOrdenCompra: '',
-    NroCotizacionAprobada: '0',
-    UsuarioCrea: 'ADMINISTRADOR',
-    AbonadoOT: '0',
-    SubTotal: '47900',
-    TotalNeto: '47900',
-    DescuentoPorc: '0',
-    TotalIVA: '9101',
-    DescuentoS: '0',
-    TotalOT: '57001'
+  const [valores, setValores] = useState(
+    {
+    Idorden: '12018',
+    IdCliente: '1245',
+  NombreCliente: 'BLANCA ESTER BAHAMONDE PAREDES',
+  IdEncargado: '1',
+  NombreEncargado: 'POR ASIGNAR',
+  Sucursal: 'INTERNA',
+  NotaVenta: '',
+  FechaIngreso: '2026-06-05',
+  HoraIngreso: '14:54',
+  HoraEntrega: '14:54',
+  Bodega: 'INTERNA',
+  IdVendedor: '1245',
+  NombreVendedor: 'PAUL CELERY',
+  Estado: '3',
+  EstadoOTTexto: 'MANTENIMIENTO',
+  UsuarioModificaOT: '--',
+  IngresoOrdenCompra: '',
+  ReferenciasDTE: '457',
+  FechaRealEntregaOT: '',
+  HoraTerminoOT: '',
+  FechaEntregaCotizacionApprox: '2026-06-08',
+  Observaciones: 'Cliente solicita revisión prioritaria.',
+  UsuarioCreaOT: 'ADMINISTRADOR',
+  AbonadoOT: '0',
+  CotizacionAprobada: '0',
+  SubTotal: '47900',
+  DescuentoPorcentaje: '0',
+  DescuentoMonto: '0',
+  TotalNeto: '47900',
+  TotalIVA: '9101',
+  TotalOT: '57001'
   });
 
   const handleChange = (field, value) => {
