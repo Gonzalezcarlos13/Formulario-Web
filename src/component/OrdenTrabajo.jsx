@@ -69,7 +69,7 @@ export default function OrdenTrabajo() {
             <Tab label="Imágenes OT" sx={{ fontWeight: 'bold', textTransform: 'none' }} />
             <Tab label="Presupuesto OT" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
             <Tab label="Solicitud de presupuesto web" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
-            <Tab label="Consulta Cliente OT" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
+            <Tab label="Cartola OT Cliente" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
             <Tab label="Devolución de insumos" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
           </Tabs>
         </Box>

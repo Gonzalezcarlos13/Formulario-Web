@@ -1,5 +1,7 @@
 // Se deja vacío para que el proxy de package.json intercepte la ruta relativa
-const http_api = "https://localhost:44351"; 
+//const http_api = "https://localhost:44351"; 
+const http_api = "http://localhost/Api";///api/OrdenTrabajo/Crear"
+
 
 const OrdenTrabajoServicio = {};
 
@@ -8,7 +10,7 @@ OrdenTrabajoServicio.CreateOrdenTrabajo = async (datos) => {
  
     console.log("url :" + url);
     console.log("json:" + JSON.stringify(datos));
-    
+    debugger;
 
     const response = await fetch(url, {
         method: 'POST',

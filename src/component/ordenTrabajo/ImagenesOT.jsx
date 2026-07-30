@@ -10,29 +10,80 @@ export default function ImagenesOT({ formOrden = {} }) {
     img4: null,
   });
 
+  const [dragOverSlot, setDragOverSlot] = useState(null);
+
+  const convertirABase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+
+  const procesarArchivo = async (slot, file) => {
+    if (!file || !file.type.startsWith('image/')) {
+      alert("Por favor, selecciona o arrastra solo archivos de imagen.");
+      return;
+    }
+    try {
+      const base64String = await convertirABase64(file);
+      setImagenes((prev) => ({ ...prev, [slot]: base64String }));
+      console.log(`Imagen asignada a ${slot} correctamente en formato Base64.`);
+    } catch (error) {
+      console.error("Error al transformar la imagen a Base64:", error);
+      alert("Ocurrió un error al procesar la imagen.");
+    }
+  };
+
+
   const handleFileChange = (slot, event) => {
     const file = event.target.files[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setImagenes((prev) => ({ ...prev, [slot]: imageUrl }));
-    }
+    procesarArchivo(slot, file);
+  };
+
+  const handleDragOver = (slot, event) => {
+    event.preventDefault(); 
+    setDragOverSlot(slot); 
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null);  // Quita la iluminación si el usuario se arrepiente
+  };
+
+  const handleDrop = (slot, event) => {
+    event.preventDefault();
+    setDragOverSlot(null);  // Resetea el estado visual
+
+    const file = event.dataTransfer.files[0]; // Captura el archivo arrastrado
+    procesarArchivo(slot, file);
   };
 
   const handleRemoveImage = (slot) => {
     setImagenes((prev) => ({ ...prev, [slot]: null }));
   };
 
+  const handleGuardarIndividual = () => {
+    console.log("Datos de imágenes listos para ir a la API:", imagenes);
+    alert("Imágenes procesadas. Estarán asociadas al presionar 'Grabar' en la vista principal.");
+  };
+
   const renderUploadSlot = (slotLabel, slotKey) => {
     const hasImage = !!imagenes[slotKey];
+    const isDraggingOver = dragOverSlot === slotKey;
 
     return (
       <Grid item xs={12} sm={6}>
         <Paper
           variant="outlined"
+          onDragOver={(e) => handleDragOver(slotKey, e)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(slotKey, e)}
           sx={{
             height: '220px',
-            backgroundColor: hasImage ? '#fafafa' : '#fcfcfc',
-            border: hasImage ? '1px solid #b8b8b8' : '2px dashed #b0bec5',
+            backgroundColor: hasImage ? '#fafafa' : (isDraggingOver ? '#e3f2fd' : '#fcfcfc'),
+            border: hasImage ? '1px solid #b8b8b8' : (isDraggingOver ? '2px dashed #1976d2' : '2px dashed #b0bec5'),
             borderRadius: 2,
             position: 'relative',
             display: 'flex',
@@ -40,7 +91,8 @@ export default function ImagenesOT({ formOrden = {} }) {
             justifyContent: 'center',
             alignItems: 'center',
             overflow: 'hidden',
-            transition: 'all 0.3s ease',
+            transition: 'all 0.2s ease',
+            transform: isDraggingOver ? 'scale(1.01)' : 'scale(1)', // Efecto sutil de pulsado al arrastrar
             '&:hover': {
               borderColor: '#0070d2',
               backgroundColor: hasImage ? '#fafafa' : '#f5f9ff',
@@ -86,7 +138,7 @@ export default function ImagenesOT({ formOrden = {} }) {
                   fontWeight: 'bold',
                 }}
               >
-                {slotLabel}
+                {slotLabel} (Base64 OK)
               </Typography>
             </Box>
           ) : (
@@ -97,15 +149,15 @@ export default function ImagenesOT({ formOrden = {} }) {
                 height: '100%',
                 flexDirection: 'column',
                 textTransform: 'none',
-                color: '#546e7a',
+                color: isDraggingOver ? '#1976d2' : '#546e7a',
               }}
             >
-              <CloudUpload sx={{ fontSize: 40, color: '#0070d2', mb: 1 }} />
+              <CloudUpload sx={{ fontSize: 40, color: isDraggingOver ? '#1976d2' : '#0070d2', mb: 1 }} />
               <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#37474f' }}>
-                {slotLabel}
+                {isDraggingOver ? "¡Suéltala aquí!" : slotLabel}
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Haz clic para buscar imagen
+                Haz clic para buscar o arrastra la imagen aquí
               </Typography>
               <input
                 type="file"
@@ -142,6 +194,7 @@ export default function ImagenesOT({ formOrden = {} }) {
           startIcon={<Save />}
           variant="contained"
           size="small"
+          onClick={handleGuardarIndividual}
           sx={{
             backgroundColor: '#e0e0e0',
             color: 'black',
