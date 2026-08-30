@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Box,
   Checkbox,
@@ -17,41 +17,50 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  DialogContentText,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
   Divider,
   CircularProgress,
-  InputAdornment
+  InputAdornment,
+  Autocomplete,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Paper,
+  TableContainer
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ClearIcon from '@mui/icons-material/Clear';
 import SaveIcon from '@mui/icons-material/Save';
 import BlockIcon from '@mui/icons-material/Block';
 import PrintIcon from '@mui/icons-material/Print';
+import EditIcon from '@mui/icons-material/Edit';
 
 import OrdenTrabajoServicio from '../../apiservicios/servicio.ordentrabajo';
 import DTODetalleOrden from "../../dto/DTODetalleOrden.js";
 import DTOImagenOrden from "../../dto/DTOImagenOrden.js";
 
-export default function GenerarOT({ valores = {}, handleChange = () => { }, limpiarValores = () => { } }) {
+const BASE_API_URL = process.env.REACT_APP_API_URL || 'http://localhost/apichess';
 
+const listaOpcionesOT = ['DESPACHADO', 'EMPAQUE', 'ENTREGADO', 'LABORATORIO'];
+const opcionesVendedores = ['PAUL CELERY', 'VALENZUELA G. XIMENA', 'RAUL CASTILLO'];
 
-  const listado = [
+const listadoBodegasInicial = [
   { id: 1, nombre: 'Bodega Central' },
   { id: 2, nombre: 'Bodega Norte' },
   { id: 3, nombre: 'Bodega Repuestos' }
 ];
 
-
-const [listadobodega, setlistadobodega] = useState(listado);
-
+export default function GenerarOT({ valores = {}, handleChange = () => { }, limpiarValores = () => { } }) {
+  const [listadobodega] = useState(listadoBodegasInicial);
+  const [, setListadoSucursales] = useState([]);
   const [subTab, setSubTab] = useState(0);
 
-  const [detalles, setdetalles] = useState([
+  const [detalles, setDetalles] = useState([
     {
       "IdDetalle": "101",
       "Idorden": "12018",
@@ -64,69 +73,96 @@ const [listadobodega, setlistadobodega] = useState(listado);
       "SubTotal": "12900"
     }
   ]);
-  const [imagenes, setimagenes] = useState([]);
+  const [imagenes] = useState([]);
   const [confirmarGuardar, setConfirmarGuardar] = useState(false);
 
-
-  const [modalBuscar, setModalBuscar] = useState({
-    abierto: false,
-    tipo: '', // 'cliente', 'sucursal', 'bodega', 'encargado', 'vendedor', 'producto'
-    titulo: ''
-  });
+  const [modalBuscar, setModalBuscar] = useState({ abierto: false, tipo: '', titulo: '' });
   const [filtroTexto, setFiltroTexto] = useState('');
   const [datosBusqueda, setDatosBusqueda] = useState([]);
   const [cargandoModal, setCargandoModal] = useState(false);
 
+  // Auxiliar para obtener fecha y hora actual
+  const obtenerFechaYHoraActuales = useCallback(() => {
+    const ahora = new Date();
+    const anio = ahora.getFullYear();
+    const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+    const dia = String(ahora.getDate()).padStart(2, '0');
+    const horas = String(ahora.getHours()).padStart(2, '0');
+    const minutos = String(ahora.getMinutes()).padStart(2, '0');
 
-  const handleChangeRef = useRef(handleChange);
+    return {
+      fechaActual: `${anio}-${mes}-${dia}`,
+      horaActual: `${horas}:${minutos}`
+    };
+  }, []);
+
+  // Setear valores iniciales de fecha/hora si no existen
   useEffect(() => {
-    handleChangeRef.current = handleChange;
-  }, [handleChange]);
+    const { fechaActual, horaActual } = obtenerFechaYHoraActuales();
+    if (!valores.FechaIngreso) handleChange('FechaIngreso', fechaActual);
+    if (!valores.HoraIngreso) handleChange('HoraIngreso', horaActual);
+  }, [valores.FechaIngreso, valores.HoraIngreso, handleChange, obtenerFechaYHoraActuales]);
 
-  const stringDetalles = JSON.stringify(detalles);
+  // Carga de sucursales inicial
+  useEffect(() => {
+    let mounted = true;
+    const fetchSucursales = async () => {
+      try {
+        const { data } = await OrdenTrabajoServicio.obtenerSucursales();
+        if (mounted) setListadoSucursales(data || []);
+      } catch (e) {
+        console.error('Error al cargar sucursales:', e);
+        if (mounted) setListadoSucursales([]);
+      }
+    };
+    fetchSucursales();
+    return () => { mounted = false; };
+  }, []);
+
+  // Cálculo de totales Memoizado
   const valorDescuentoPorc = valores.DescuentoPorc || '0';
-
-
-  const  cargarBodegas = ()=>{
- 
-
-  };
- 
-  const  cargarVendedores = ()=>{
-
-
-  };
-
-  useEffect(()=>{
-    cargarBodegas();
-    cargarVendedores();
-
-  }, [])
-
-  // --- CÁLCULO SEGURO DE TOTALES ---
-  useEffect(() => {
-    const netoAcumulado = detalles.reduce((acumulado, item) => {
-      const subtotalItem = parseFloat(item.SubTotal) || 0;
-      return acumulado + subtotalItem;
-    }, 0);
-
+  
+  const totalesCalculados = useMemo(() => {
+    const netoAcumulado = detalles.reduce((acumulado, item) => acumulado + (parseFloat(item.SubTotal) || 0), 0);
     const descPorcGlobal = parseFloat(valorDescuentoPorc) || 0;
     const descuentoDinero = Math.round(netoAcumulado * (descPorcGlobal / 100));
-
     const netoConDescuento = netoAcumulado - descuentoDinero;
     const iva = Math.round(netoConDescuento * 0.19);
     const totalOT = netoConDescuento + iva;
 
-    // Llamamos de forma segura mediante la referencia sin activar el bucle
-    const guardar = handleChangeRef.current;
-    if (guardar) {
-      guardar('SubTotal', Math.round(netoAcumulado).toString());
-      guardar('TotalNeto', Math.round(netoConDescuento).toString());
-      guardar('DescuentoS', descuentoDinero.toString());
-      guardar('TotalIVA', iva.toString());
-      guardar('TotalOT', Math.round(totalOT).toString());
-    }
+    return {
+      SubTotal: Math.round(netoAcumulado).toString(),
+      TotalNeto: Math.round(netoConDescuento).toString(),
+      DescuentoS: descuentoDinero.toString(),
+      TotalIVA: iva.toString(),
+      TotalOT: Math.round(totalOT).toString()
+    };
   }, [detalles, valorDescuentoPorc]);
+
+  // Actualización de campos globales cuando cambien los totales calculados
+  useEffect(() => {
+    Object.entries(totalesCalculados).forEach(([key, val]) => {
+      if (valores[key] !== val) {
+        handleChange(key, val);
+      }
+    });
+  }, [totalesCalculados, handleChange, valores]);
+
+  const handleImprimir = async () => {
+    try {
+      const response = await fetch(`${BASE_API_URL}/clientes.php/guardarImpresion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(valores),
+      });
+
+      if (!response.ok) throw new Error('Error en el servidor al procesar la información.');
+      window.print();
+    } catch (error) {
+      console.error('Error al enviar e imprimir:', error);
+      alert('Ocurrió un error al enviar la información.');
+    }
+  };
 
   const handleAbrirBuscador = async (tipo, titulo) => {
     setModalBuscar({ abierto: true, tipo, titulo });
@@ -134,31 +170,53 @@ const [listadobodega, setlistadobodega] = useState(listado);
     setFiltroTexto('');
     try {
       let datos = [];
-      switch (tipo) {
-        case 'cliente':
-          datos = await OrdenTrabajoServicio.obtenerClientes();
-          break;
-        case 'sucursal':
-          datos = await OrdenTrabajoServicio.obtenerSucursales(valores.NombreCliente);
-          break;
-        case 'bodega':
-          datos = await OrdenTrabajoServicio.obtenerBodegas();
-          break;
-        case 'encargado':
-          datos = await OrdenTrabajoServicio.obtenerEncargados();
-          break;
-        case 'vendedor':
-          datos = await OrdenTrabajoServicio.obtenerVendedores();
-          break;
-        case 'producto':
-          datos = await OrdenTrabajoServicio.obtenerProductos();
-          break;
-        default:
-          datos = [];
+      if (tipo === 'cliente') {
+        const resp = await fetch(`${BASE_API_URL}/clientes.php/getAllClientes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idsucursal: '1', busqueda: '', id: 0 })
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const jsonResp = await resp.json();
+        const items = Array.isArray(jsonResp) ? jsonResp : (jsonResp.data || Object.values(jsonResp) || []);
+
+        datos = items.map(item => ({
+          ...item,
+          nombre: item.nombre || item.Nombre || item.ClienteNombre || item.RazonSocial || '',
+          codigo: item.codigo || item.Codigo || item.IDCliente || item.RUT || '',
+          Descripcion: item.Descripcion || item.Direccion || '',
+          sucursal: item.sucursal || item.Sucursal || ''
+        }));
+      } else if (tipo === 'producto') {
+        const resp = await fetch(`${BASE_API_URL}/productos.php/GetAllProductosPaginado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idsucursal: '1', busqueda: '', pagina: 1, registro: 17 })
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        const items = Array.isArray(json.listado) ? json.listado : [];
+
+        datos = items.map(item => {
+          const nombreLimpio = item.Descripcion ? item.Descripcion.replace(/^\t+/, '').trim() : (item.nombre || 'Sin Descripción');
+          const valorNeto = item.Neto ? parseFloat(item.Neto) : (item.precioNeto || item.PrecioNeto || 0);
+          const valorStock = item.Stock !== undefined ? parseInt(item.Stock, 10) : (item.stock || 0);
+
+          return {
+            ...item,
+            id: item.id || item.Id,
+            codigo: item.Codigo || item.codigo || '',
+            nombre: nombreLimpio,
+            descripcion: nombreLimpio,
+            Neto: valorNeto,
+            stock: valorStock,
+            Stock: valorStock
+          };
+        });
       }
-      setDatosBusqueda(datos || []);
+      setDatosBusqueda(datos);
     } catch (error) {
-      console.error(`Error al cargar datos de ${tipo} desde la BD:`, error);
+      console.error(`Error al cargar datos de ${tipo}:`, error);
       setDatosBusqueda([]);
     } finally {
       setCargandoModal(false);
@@ -166,34 +224,57 @@ const [listadobodega, setlistadobodega] = useState(listado);
   };
 
   const handleSeleccionarElemento = (item) => {
-    switch (modalBuscar.tipo) {
-      case 'cliente':
-        handleChange('NombreCliente', item.nombre || item.Nombre || item.Descripcion || '');
-        if (item.sucursal || item.Sucursal) {
-          handleChange('Sucursal', item.sucursal || item.Sucursal);
-        }
-        break;
-      case 'sucursal':
-        handleChange('Sucursal', item.nombre || item.Nombre || item.Descripcion || '');
-        break;
-      case 'bodega':
-        handleChange('Bodega', item.nombre || item.Nombre || item.Descripcion || '');
-        break;
-      case 'encargado':
-        handleChange('EncargadoOT', item.nombre || item.Nombre || item.Descripcion || '');
-        break;
-      case 'vendedor':
-        handleChange('Vendedor', item.nombre || item.Nombre || item.Descripcion || '');
-        break;
-      case 'producto':
-        handleChange('TmpProductoCodigo', item.codigo || item.Codigo || '');
-        handleChange('TmpProductoDescripcion', item.descripcion || item.Descripcion || '');
-        handleChange('TmpProductoValorNeto', (item.precioNeto || item.PrecioNeto || item.ValorUnitario || 0).toString());
-        handleChange('TmpProductoStock', (item.stock || item.Stock || 0).toString());
-        break;
-      default:
-        break;
+    const formatearFechaInput = (cadenaFecha) => {
+      if (!cadenaFecha) return '';
+      const d = new Date(cadenaFecha);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0];
+      }
+      return '';
+    };
+
+    if (modalBuscar.tipo === 'cliente') {
+      const clienteNombre = item.RazonSocial || item.nombre || item.Nombre || item.Descripcion || '';
+      if (clienteNombre) handleChange('NombreCliente', clienteNombre);
+
+      if (item.FechaIngreso) handleChange('FechaIngreso', formatearFechaInput(item.FechaIngreso));
+      if (item.FechaVencto) handleChange('FechaEntrega', formatearFechaInput(item.FechaVencto));
+      if (item.Fechainicio) handleChange('FechaRealEntrega', formatearFechaInput(item.Fechainicio));
+
+      if (item.FechaVencto && item.FechaVencto.includes(' ')) {
+        handleChange('HoraEntrega', item.FechaVencto.split(' ')[1]);
+      }
+
+      handleChange('HoraTermino', '');
+      if (item.Vendedor) handleChange('Vendedor', item.Vendedor);
+      if (item.Observaciones) handleChange('Observaciones', item.Observaciones);
+
+      const valSucursal = (item.sucursal || item.Sucursal || item.IdSucursal)?.toString();
+      if (valSucursal) {
+        handleChange('Sucursal', (valSucursal === '1' || valSucursal === 'Casa Matriz (1)') ? 'INTERNA' : valSucursal);
+      }
+    } else if (modalBuscar.tipo === 'producto') {
+      const cod = item.codigo || item.Codigo || '';
+      const desc = item.descripcion || item.nombre || item.Descripcion || '';
+      const netoVal = item.Neto !== undefined ? item.Neto : (item.precio || item.ValorUnitario || 0);
+      const stockVal = item.Stock !== undefined ? item.Stock : (item.stock || 0);
+
+      handleChange('TmpProductoCodigo', cod);
+      handleChange('TmpProductoDescripcion', desc);
+      handleChange('TmpProductoValorNeto', Math.round(parseFloat(netoVal) || 0).toString());
+      handleChange('TmpProductoStock', stockVal.toString());
+
+      let cantidadActual = parseFloat(valores.TmpProductoCantidad) || 1;
+      handleChange('TmpProductoCantidad', cantidadActual.toString());
+
+      const descPorcActual = parseFloat(valores.TmpProductoDescuentoPorc) || 0;
+      const totalNetoItem = cantidadActual * (parseFloat(netoVal) || 0);
+      const descuentoItem = totalNetoItem * (descPorcActual / 100);
+      const finalNetoItem = totalNetoItem - descuentoItem;
+
+      handleChange('TmpProductoTotalNeto', Math.round(finalNetoItem).toString());
     }
+
     setModalBuscar({ abierto: false, tipo: '', titulo: '' });
     setDatosBusqueda([]);
     setFiltroTexto('');
@@ -202,7 +283,7 @@ const [listadobodega, setlistadobodega] = useState(listado);
   const validarSoloNumerosKeyDown = (e) => {
     if (
       ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight'].includes(e.key) ||
-      (e.ctrlKey === true || e.metaKey === true)
+      e.ctrlKey || e.metaKey
     ) {
       return;
     }
@@ -213,6 +294,7 @@ const [listadobodega, setlistadobodega] = useState(listado);
 
   const agregarProductoALaTabla = () => {
     const codigo = valores.TmpProductoCodigo || '';
+    const descripcion = valores.TmpProductoDescripcion || `PRODUCTO / REPUESTO: ${codigo}`;
     const cantidad = valores.TmpProductoCantidad || '';
     const valorNeto = valores.TmpProductoValorNeto || '';
     const descPorc = valores.TmpProductoDescuentoPorc || '0';
@@ -228,14 +310,14 @@ const [listadobodega, setlistadobodega] = useState(listado);
       "Idorden": valores.IdOrden || "12018",
       "IdTipo": subTab === 0 ? "2" : "1",
       "Codigo": codigo,
-      "Descripcion": valores.TmpProductoDescripcion || `PRODUCTO / REPUESTO: ${codigo}`,
+      "Descripcion": descripcion,
       "Cantidad": cantidad,
       "ValorUnitario": valorNeto,
       "DescuentoPorcentaje": descPorc,
       "SubTotal": totalNeto
     };
 
-    setdetalles(prev => [...prev, nuevoDetalle]);
+    setDetalles(prev => [...prev, nuevoDetalle]);
 
     const camposALimpiar = [
       'TmpProductoCodigo', 'TmpProductoCantidad', 'TmpProductoValorNeto',
@@ -271,12 +353,12 @@ const [listadobodega, setlistadobodega] = useState(listado);
   };
 
   const eliminarDetalle = (idDetalle) => {
-    setdetalles(prev => prev.filter(item => item.IdDetalle !== idDetalle));
+    setDetalles(prev => prev.filter(item => item.IdDetalle !== idDetalle));
   };
 
   const GuardarOrden = async () => {
     try {
-      var datos = {
+      const datos = {
         "Cabecera": valores,
         "Detalles": (detalles || []).map(d => new DTODetalleOrden(d)),
         "Imagenes": (imagenes || []).map(d => new DTOImagenOrden(d))
@@ -290,15 +372,9 @@ const [listadobodega, setlistadobodega] = useState(listado);
     }
   };
 
-  const ConfirmarGuardarOrden = () => {
-    setConfirmarGuardar(true);
-  };
-
   const LimpiarFormulario = () => {
-    setdetalles([]);
-    setimagenes([]);
+    setDetalles([]);
     setSubTab(0);
-    const emptyVal = '';
     const fieldsToClear = [
       'NombreCliente', 'Sucursal', 'FechaIngreso', 'HoraIngreso', 'FechaEntrega', 'HoraEntrega', 'Bodega',
       'FechaRealEntrega', 'HoraTermino', 'FechaEntregaCotiz', 'IdOrden', 'NroNotaVenta', 'EncargadoOT',
@@ -307,26 +383,39 @@ const [listadobodega, setlistadobodega] = useState(listado);
       'TmpProductoDescuentoPorc', 'TmpProductoTotalNeto', 'TmpProductoComisionPorc', 'TmpProductoTotalComision',
       'TmpProductoCodigo', 'TmpProductoStock', 'TmpProductoDescripcion'
     ];
-    fieldsToClear.forEach((key) => {
-      if (handleChange) handleChange(key, emptyVal);
-    });
+    fieldsToClear.forEach(key => handleChange(key, ''));
     if (limpiarValores) limpiarValores();
+
+    const { fechaActual, horaActual } = obtenerFechaYHoraActuales();
+    handleChange('FechaIngreso', fechaActual);
+    handleChange('HoraIngreso', horaActual);
   };
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+  const styleInputIcons = {
+    '& input::-webkit-calendar-picker-indicator': {
+      display: 'block !important',
+      cursor: 'pointer'
+    }
+  };
 
-      {/* SECCIÓN 1: DATOS DE IDENTIFICACIÓN Y TIEMPOS */}
-      <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', p: 2.5, pt: 2, position: 'relative', backgroundColor: '#fff' }}>
+  const detallesFiltrados = useMemo(() => {
+    return detalles.filter(item => (subTab === 0 ? item.IdTipo === "2" : item.IdTipo === "1"));
+  }, [detalles, subTab]);
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2, md: 2.5 }, width: '100%', p: { xs: 1, sm: 2 } }}>
+      
+      {/* SECCIÓN IDENTIFICACIÓN Y TIEMPOS */}
+      <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', p: { xs: 1.5, sm: 2.5 }, pt: 2, position: 'relative', backgroundColor: '#fff', width: '100%' }}>
         <Typography variant="body2" sx={{ position: 'absolute', top: '-10px', left: '15px', backgroundColor: '#fff', px: 1, color: '#005cb2', fontWeight: 'bold', fontSize: '12px' }}>
           Datos de Identificación y Tiempos
         </Typography>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 2, mt: 0.5 }}>
-          {/* LUPA: CLIENTE */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(6, 1fr)', md: 'repeat(12, 1fr)' }, gap: { xs: 1.5, sm: 2 }, mt: 0.5, width: '100%' }}>
           <TextField
             label="Cliente"
             size="small"
+            fullWidth
             value={valores.NombreCliente || ''}
             onChange={(e) => handleChange('NombreCliente', e.target.value)}
             slotProps={{
@@ -340,102 +429,92 @@ const [listadobodega, setlistadobodega] = useState(listado);
                 )
               }
             }}
-            sx={{ gridColumn: 'span 7' }}
+            sx={{ gridColumn: { xs: '1 / -1', sm: 'span 6', md: 'span 7' } }}
           />
 
-          {/* LUPA: SUCURSAL */}
-          <TextField
-            label="Sucursal"
-            size="small"
-            value={valores.Sucursal || ''}
-            onChange={(e) => handleChange('Sucursal', e.target.value)}
-            slotProps={{
-              input: {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => handleAbrirBuscador('sucursal', 'Buscar Sucursal')}>
-                      <SearchIcon sx={{ color: '#0066cc' }} />
-                    </IconButton>
-                  </InputAdornment>
-                )
-              }
-            }}
-            sx={{ gridColumn: 'span 5' }}
-          />
+          <FormControl size="small" fullWidth sx={{ gridColumn: { xs: '1 / -1', sm: 'span 6', md: 'span 5' } }}>
+            <TextField
+              size="small"
+              id="sucursal-input"
+              label="Sucursal"
+              value={valores.Sucursal || 'INTERNA'}
+              slotProps={{ input: { readOnly: true } }}
+              variant="outlined"
+              fullWidth
+            />
+          </FormControl>
 
-          <TextField label="Ingreso OT" type="date" size="small" value={valores.FechaIngreso || ''} onChange={(e) => handleChange('FechaIngreso', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 3' }} />
-          <TextField label="Hora Ingreso" type="time" size="small" value={valores.HoraIngreso || ''} onChange={(e) => handleChange('HoraIngreso', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 3' }} />
-          <TextField label="Fecha Entrega" type="date" size="small" value={valores.FechaEntrega || ''} onChange={(e) => handleChange('FechaEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 3' }} />
-          <TextField label="Hora Entrega" type="time" size="small" value={valores.HoraEntrega || ''} onChange={(e) => handleChange('HoraEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 3' }} />
+          <TextField label="Ingreso OT" type="date" size="small" fullWidth value={valores.FechaIngreso || ''} onChange={(e) => handleChange('FechaIngreso', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' } }} />
+          <TextField label="Hora Ingreso" type="time" size="small" fullWidth value={valores.HoraIngreso || ''} onChange={(e) => handleChange('HoraIngreso', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' } }} />
+          <TextField label="Fecha Entrega" type="date" size="small" fullWidth value={valores.FechaEntrega || ''} onChange={(e) => handleChange('FechaEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' } }} />
+          <TextField label="Hora Entrega" type="time" size="small" fullWidth value={valores.HoraEntrega || ''} onChange={(e) => handleChange('HoraEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' } }} />
 
-           <FormControl size="small" sx={{ gridColumn: 'span 4' }}>
-  <InputLabel id="bodega-select-label">Bodega</InputLabel>
-  <Select
-    labelId="bodega-select-label"
-    id="bodega-select"
-    value={valores.Bodega || ''}
-    label="Bodega"
-    onChange={(e) => handleChange('Bodega', e.target.value)}
-  >
-    {listadobodega && listadobodega.length > 0 ? (
-      listadobodega.map((item, index) => (
-        <MenuItem 
-          key={item.id || item.codigo || item.Codigo || index} 
-          value={item.id || item.codigo || item.Codigo || item.nombre || item.Nombre}
-        >
-          {item.nombre || item.Nombre || item.descripcion || item.Descripcion}
-        </MenuItem>
-      ))
-    ) : (
-      <MenuItem disabled value="">
-        <em>Sin bodegas disponibles</em>
-      </MenuItem>
-    )}
-  </Select>
-</FormControl>
+          <FormControl size="small" fullWidth sx={{ gridColumn: { xs: '1 / -1', sm: 'span 6', md: 'span 4' } }}>
+            <InputLabel id="bodega-select-label">Bodega</InputLabel>
+            <Select
+              labelId="bodega-select-label"
+              id="bodega-select"
+              value={valores.Bodega || ''}
+              label="Bodega"
+              onChange={(e) => handleChange('Bodega', e.target.value)}
+            >
+              {listadobodega.length > 0 ? (
+                listadobodega.map((item, index) => (
+                  <MenuItem key={item.id || index} value={item.id || item.nombre}>
+                    {item.nombre}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled value=""><em>Sin bodegas disponibles</em></MenuItem>
+              )}
+            </Select>
+          </FormControl>
 
-          <TextField label="Fecha Real Entrega OT" type="date" size="small" value={valores.FechaRealEntrega || ''} onChange={(e) => handleChange('FechaRealEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 4' }} />
-          <TextField label="Hora Término OT" type="time" size="small" value={valores.HoraTermino || ''} onChange={(e) => handleChange('HoraTermino', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ backgroundColor: '#f4fbf4', gridColumn: 'span 4' }} />
-
-          <TextField label="Fecha Entrega Cotización Aproximadamente" type="date" size="small" value={valores.FechaEntregaCotizacionAprox || ''} onChange={(e) => handleChange('FechaEntregaCotizacionAprox', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ gridColumn: 'span 12' }} />
+          <TextField label="Fecha Real Entrega OT" type="date" size="small" fullWidth value={valores.FechaRealEntrega || ''} onChange={(e) => handleChange('FechaRealEntrega', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 4' } }} />
+          <TextField label="Hora Término OT" type="time" size="small" fullWidth value={valores.HoraTermino || ''} onChange={(e) => handleChange('HoraTermino', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, backgroundColor: '#f4fbf4', gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 4' } }} />
+          <TextField label="Fecha Entrega Cotización Aprox." type="date" size="small" fullWidth value={valores.FechaEntregaCotizacionAprox || ''} onChange={(e) => handleChange('FechaEntregaCotizacionAprox', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ ...styleInputIcons, gridColumn: '1 / -1' }} />
         </Box>
       </Box>
 
-      {/* SECCIÓN 2: GESTIÓN INTERNA */}
-      <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', p: 2.5, pt: 2, position: 'relative', backgroundColor: '#fff', width: '100%' }}>
+      {/* SECCIÓN GESTIÓN INTERNA */}
+      <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', p: { xs: 1.5, sm: 2.5 }, pt: 2, position: 'relative', backgroundColor: '#fff', width: '100%' }}>
         <Typography variant="body2" sx={{ position: 'absolute', top: '-10px', left: '15px', backgroundColor: '#fff', px: 1, color: '#005cb2', fontWeight: 'bold', fontSize: '12px' }}>
           Gestión Interna
         </Typography>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5, width: '100%' }}>
-
-          {/* FILA 1 */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 2, width: '100%' }}>
-            <Box sx={{ gridColumn: 'span 3', display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Button variant="contained" size="small" sx={{ textTransform: 'none', backgroundColor: '#0066cc', minWidth: '120px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, mt: 0.5, width: '100%' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(6, 1fr)', md: 'repeat(12, 1fr)' }, gap: { xs: 1.5, sm: 2 }, width: '100%' }}>
+            <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'span 6', md: 'span 3' }, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Button variant="contained" size="small" sx={{ textTransform: 'none', backgroundColor: '#0066cc', minWidth: '110px', fontSize: '11px', whiteSpace: 'nowrap' }}>
                 Cambiar N° OT
               </Button>
-              <Checkbox checked={valores.SinRebajaStock || false} onChange={(e) => handleChange('SinRebajaStock', e.target.checked)} size="small" />
+              <FormControlLabel
+                control={<Checkbox checked={valores.SinRebajaStock || false} onChange={(e) => handleChange('SinRebajaStock', e.target.checked)} size="small" />}
+                label={<Typography variant="caption">Sin Rebaja</Typography>}
+                sx={{ m: 0 }}
+              />
             </Box>
 
             <TextField
               label="Número OT"
               size="small"
+              fullWidth
               value={valores.IdOrden || ''}
               onKeyDown={validarSoloNumerosKeyDown}
               onChange={(e) => handleChange('IdOrden', e.target.value.replace(/[^0-9]/g, ''))}
-              sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#0066cc', textAlign: 'center' }, gridColumn: 'span 2' }}
+              sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#0066cc', textAlign: 'center' }, gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 2' } }}
             />
 
             <TextField
               label="N° Nota de Venta"
               size="small"
+              fullWidth
               value={valores.NroNotaVenta || ''}
               onChange={(e) => handleChange('NroNotaVenta', e.target.value)}
-              sx={{ gridColumn: 'span 3' }}
+              sx={{ gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' } }}
             />
 
-            <Box sx={{ gridColumn: 'span 4' }}>
+            <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'span 6', md: 'span 4' } }}>
               <FormControl size="small" fullWidth variant="outlined">
                 <InputLabel id="estado-ot-select-label">Estado OT</InputLabel>
                 <Select
@@ -452,86 +531,64 @@ const [listadobodega, setlistadobodega] = useState(listado);
             </Box>
           </Box>
 
-          {/* FILA 2: LUPAS ENCARGADO Y VENDEDOR */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 2, width: '100%' }}>
-            <TextField
-              label="Encargado OT"
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: { xs: 1.5, sm: 2 }, width: '100%' }}>
+            <Autocomplete
               size="small"
-              value={valores.EncargadoOT || ''}
-              onChange={(e) => handleChange('EncargadoOT', e.target.value)}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => handleAbrirBuscador('encargado', 'Buscar Encargado OT')}>
-                        <SearchIcon sx={{ color: '#0066cc' }} />
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }
-              }}
-              sx={{ gridColumn: 'span 6' }}
+              fullWidth
+              options={listaOpcionesOT}
+              value={valores.EncargadoOT || null}
+              onChange={(e, newValue) => handleChange('EncargadoOT', newValue || '')}
+              renderInput={(params) => <TextField {...params} label="Encargado OT" placeholder="Seleccione o busque..." />}
             />
 
-            <TextField
-              label="Vendedor"
+            <Autocomplete
               size="small"
-              value={valores.Vendedor || ''}
-              onChange={(e) => handleChange('Vendedor', e.target.value)}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => handleAbrirBuscador('vendedor', 'Buscar Vendedor')}>
-                        <SearchIcon sx={{ color: '#0066cc' }} />
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }
-              }}
-              sx={{ gridColumn: 'span 6' }}
+              fullWidth
+              options={opcionesVendedores}
+              value={valores.Vendedor || null}
+              onChange={(e, newValue) => handleChange('Vendedor', newValue || '')}
+              renderInput={(params) => <TextField {...params} label="Vendedor" placeholder="Seleccione o busque..." />}
             />
           </Box>
 
-          {/* FILA 3 */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 2, width: '100%' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(6, 1fr)', md: 'repeat(12, 1fr)' }, gap: { xs: 1.5, sm: 2 }, width: '100%' }}>
             <TextField
               label="Ingreso Orden de Compra"
               size="small"
+              fullWidth
               value={valores.IngresoOrdenCompra || ''}
               onChange={(e) => handleChange('IngresoOrdenCompra', e.target.value)}
-              sx={{ gridColumn: 'span 6' }}
+              sx={{ gridColumn: { xs: '1 / -1', sm: 'span 6', md: 'span 6' } }}
             />
 
-            <Button variant="outlined" size="medium" sx={{ textTransform: 'none', height: '38px', gridColumn: 'span 3', fontSize: '11.5px', fontWeight: 'bold' }}>
+            <Button variant="outlined" size="medium" fullWidth sx={{ textTransform: 'none', height: '38px', gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' }, fontSize: '11.5px', fontWeight: 'bold' }}>
               Referencias DTE
             </Button>
 
             <TextField
               label="Usuario Modifica"
               size="small"
+              fullWidth
               value={valores.UsuarioModifica || '--'}
               slotProps={{ input: { readOnly: true } }}
-              sx={{ gridColumn: 'span 3' }}
+              sx={{ gridColumn: { xs: '1 / -1', sm: 'span 3', md: 'span 3' } }}
             />
           </Box>
 
-          {/* FILA 4 */}
           <Box sx={{ width: '100%', mt: 0.5 }}>
             <TextField label="Observaciones" size="small" fullWidth multiline rows={1.5} value={valores.Observaciones || ''} onChange={(e) => handleChange('Observaciones', e.target.value)} sx={{ backgroundColor: '#fffbe6' }} />
           </Box>
-
         </Box>
       </Box>
 
-      {/* SECCIÓN 3: TABLA DE PRODUCTOS / SERVICIOS */}
-      <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', backgroundColor: '#eaeff4', overflow: 'hidden' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#cfd8dc', px: 2, py: 0.5 }}>
+      {/* SECCIÓN TABLA PRODUCTOS Y SERVICIOS CON MUI */}
+      <Box sx={{ border: '1px solid #cfd8dc', borderRadius: '6px', backgroundColor: '#eaeff4', overflow: 'hidden', width: '100%' }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, backgroundColor: '#cfd8dc', px: 2, py: 0.5, gap: 1 }}>
           <Tabs value={subTab} onChange={(e, val) => setSubTab(val)} sx={{ minHeight: '36px', '& .MuiTab-root': { minHeight: '36px', py: 0.5, fontSize: '13px' } }}>
             <Tab label="Productos" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
             <Tab label="Servicios" sx={{ textTransform: 'none', fontWeight: 'bold' }} />
           </Tabs>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: { xs: 'space-between', sm: 'flex-end' }, gap: 1, pb: { xs: 0.5, sm: 0 } }}>
             <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'green', fontSize: '12px' }}>N° Cotización Aprobada:</Typography>
             <Select size="small" value={valores.NroCotizacionAprobada || '0'} onChange={(e) => handleChange('NroCotizacionAprobada', e.target.value)} sx={{ height: '26px', backgroundColor: '#fff', minWidth: '60px', fontSize: '12px' }}>
               <MenuItem value="0">0</MenuItem>
@@ -540,254 +597,289 @@ const [listadobodega, setlistadobodega] = useState(listado);
         </Box>
 
         {subTab === 0 ? (
-          <Box sx={{ p: 1.5, display: 'flex', gap: 1.5, alignItems: 'center', backgroundColor: '#f5f5f5', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0' }}>
+          <Box sx={{ p: { xs: 1, sm: 1.5 }, display: 'flex', flexDirection: 'column', gap: 1.5, backgroundColor: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 1.5, alignItems: { xs: 'stretch', md: 'center' }, width: '100%' }}>
+              <TextField
+                label="Producto"
+                size="small"
+                fullWidth
+                value={valores.TmpProductoDescripcion || valores.TmpProductoCodigo || ''}
+                onChange={(e) => handleChange('TmpProductoDescripcion', e.target.value)}
+                sx={{ backgroundColor: '#fff', flexGrow: 1 }}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => handleAbrirBuscador('producto', 'Mantenedor de Productos')}>
+                          <SearchIcon sx={{ color: '#0066cc' }} />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }
+                }}
+              />
 
-            {/* LUPA: PRODUCTO */}
-            <TextField
-              label="Producto"
-              size="small"
-              value={valores.TmpProductoCodigo || ''}
-              onChange={(e) => handleChange('TmpProductoCodigo', e.target.value)}
-              sx={{ width: '35%', backgroundColor: '#fff' }}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => handleAbrirBuscador('producto', 'Buscar Producto / Repuesto')}>
-                        <SearchIcon sx={{ color: '#0066cc' }} />
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }
-              }}
-            />
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField label="Stock" type="text" size="small" value={valores.TmpProductoStock || '0'} slotProps={{ input: { readOnly: true } }} sx={{ width: { xs: '50%', md: '80px' }, backgroundColor: '#e0e0e0' }} />
+                <FormControlLabel control={<Checkbox checked={valores.SinRebajaStock || false} onChange={(e) => handleChange('SinRebajaStock', e.target.checked)} color="error" size="small" />} label={<Typography variant="caption" sx={{ color: 'red', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Sin rebaja</Typography>} />
+              </Box>
+            </Box>
 
-            <TextField label="Stock" type="text" size="small" value={valores.TmpProductoStock || '0'} slotProps={{ input: { readOnly: true } }} sx={{ width: '65px', backgroundColor: '#e0e0e0' }} />
-            <FormControlLabel control={<Checkbox checked={valores.SinRebajaStock || false} onChange={(e) => handleChange('SinRebajaStock', e.target.checked)} color="error" size="small" />} label={<Typography variant="caption" sx={{ color: 'red', fontWeight: 'bold' }}>Sin rebaja de stock</Typography>} />
-
-            <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, mt: 0.5 }}>
-              <TextField
-                label="Cantidad"
-                type="text"
-                size="small"
-                value={valores.TmpProductoCantidad || ''}
-                onKeyDown={validarSoloNumerosKeyDown}
-                onChange={(e) => handleCalculosYCambios('TmpProductoCantidad', e.target.value)}
-                onKeyDownCapture={verificarEnter}
-                sx={{ backgroundColor: '#fff' }}
-              />
-              <TextField
-                label="Valor Neto"
-                type="text"
-                size="small"
-                value={valores.TmpProductoValorNeto || ''}
-                onKeyDown={validarSoloNumerosKeyDown}
-                onChange={(e) => handleCalculosYCambios('TmpProductoValorNeto', e.target.value)}
-                onKeyDownCapture={verificarEnter}
-                sx={{ backgroundColor: '#fff' }}
-              />
-              <TextField
-                label="Descto.(%)"
-                type="text"
-                size="small"
-                value={valores.TmpProductoDescuentoPorc || ''}
-                onKeyDown={validarSoloNumerosKeyDown}
-                onChange={(e) => handleCalculosYCambios('TmpProductoDescuentoPorc', e.target.value)}
-                onKeyDownCapture={verificarEnter}
-                sx={{ backgroundColor: '#fff' }}
-              />
-              <TextField label="Total Neto" type="text" size="small" value={valores.TmpProductoTotalNeto || ''} slotProps={{ input: { readOnly: true } }} sx={{ backgroundColor: '#e0e0e0' }} />
-              <TextField
-                label="Comisión (%)"
-                type="text"
-                size="small"
-                value={valores.TmpProductoComisionPorc || ''}
-                onKeyDown={validarSoloNumerosKeyDown}
-                onChange={(e) => handleCalculosYCambios('TmpProductoComisionPorc', e.target.value)}
-                sx={{ backgroundColor: '#fff' }}
-              />
-              <TextField
-                label="Total Comisión ($)"
-                type="text"
-                size="small"
-                value={valores.TmpProductoTotalComision || ''}
-                onKeyDown={validarSoloNumerosKeyDown}
-                onChange={(e) => handleCalculosYCambios('TmpProductoTotalComision', e.target.value)}
-                sx={{ backgroundColor: '#fff' }}
-              />
+            <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' }, gap: 1 }}>
+              <TextField label="Cantidad" type="text" size="small" fullWidth value={valores.TmpProductoCantidad || ''} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleCalculosYCambios('TmpProductoCantidad', e.target.value)} onKeyDownCapture={verificarEnter} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Valor Neto" type="text" size="small" fullWidth value={valores.TmpProductoValorNeto || ''} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleCalculosYCambios('TmpProductoValorNeto', e.target.value)} onKeyDownCapture={verificarEnter} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Descto.(%)" type="text" size="small" fullWidth value={valores.TmpProductoDescuentoPorc || ''} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleCalculosYCambios('TmpProductoDescuentoPorc', e.target.value)} onKeyDownCapture={verificarEnter} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Total Neto" type="text" size="small" fullWidth value={valores.TmpProductoTotalNeto || ''} slotProps={{ input: { readOnly: true } }} sx={{ backgroundColor: '#e0e0e0' }} />
+              <TextField label="Comisión (%)" type="text" size="small" fullWidth value={valores.TmpProductoComisionPorc || ''} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleCalculosYCambios('TmpProductoComisionPorc', e.target.value)} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Total Comisión ($)" type="text" size="small" fullWidth value={valores.TmpProductoTotalComision || ''} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleCalculosYCambios('TmpProductoTotalComision', e.target.value)} sx={{ backgroundColor: '#fff' }} />
             </Box>
 
             <Box sx={{ width: '100%', display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
-              <Button variant="contained" size="small" onClick={agregarProductoALaTabla} sx={{ textTransform: 'none', backgroundColor: '#0066cc' }}>
+              <Button variant="contained" size="small" fullWidth sx={{ display: { xs: 'block', sm: 'none' }, textTransform: 'none', backgroundColor: '#0066cc' }} onClick={agregarProductoALaTabla}>
+                + Insertar Producto
+              </Button>
+              <Button variant="contained" size="small" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', backgroundColor: '#0066cc' }} onClick={agregarProductoALaTabla}>
                 + Insertar Producto
               </Button>
             </Box>
           </Box>
         ) : (
-          <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5, backgroundColor: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
+          <Box sx={{ p: { xs: 1, sm: 1.5 }, display: 'flex', flexDirection: 'column', gap: 1.5, backgroundColor: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
             <TextField label="Servicio (texto libre)" size="small" fullWidth multiline rows={2} sx={{ backgroundColor: '#fffbe6' }} placeholder="Escribe la descripción del servicio técnico aquí..." />
-            <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1 }}>
-              <TextField label="Cantidad" type="text" size="small" onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioCantidad', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
-              <TextField label="Valor Unitario $" type="text" size="small" onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioValor', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
-              <TextField label="Descuento (%)" type="text" size="small" onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioDesc', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
-              <TextField label="Total Neto $" type="text" size="small" sx={{ backgroundColor: '#e0e0e0' }} slotProps={{ input: { readOnly: true } }} />
-              <TextField label="Comisión (%)" type="text" size="small" onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioComision', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
+            <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1 }}>
+              <TextField label="Cantidad" type="text" size="small" fullWidth onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioCantidad', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Valor Unitario $" type="text" size="small" fullWidth onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioValor', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Descuento (%)" type="text" size="small" fullWidth onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioDesc', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
+              <TextField label="Total Neto $" type="text" size="small" fullWidth sx={{ backgroundColor: '#e0e0e0' }} slotProps={{ input: { readOnly: true } }} />
+              <TextField label="Comisión (%)" type="text" size="small" fullWidth onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('TmpServicioComision', e.target.value.replace(/[^0-9]/g, ''))} sx={{ backgroundColor: '#fff' }} />
             </Box>
           </Box>
         )}
 
-        <Box sx={{ overflowX: 'auto', backgroundColor: '#fff' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif', fontSize: '12px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#0056b3', color: '#fff', height: '32px' }}>
-                <th style={{ padding: '0 8px', width: '40px' }}>N°</th>
-                <th style={{ textAlign: 'left', padding: '0 8px' }}>Código</th>
-                <th style={{ textAlign: 'left', padding: '0 8px' }}>Descripción / Servicio</th>
-                <th style={{ textAlign: 'center', padding: '0 8px' }}>Cantidad</th>
-                <th style={{ textAlign: 'right', padding: '0 8px' }}>Valor Unit.</th>
-                <th style={{ textAlign: 'center', padding: '0 8px' }}>Desc. (%)</th>
-                <th style={{ textAlign: 'right', padding: '0 8px' }}>Sub Total</th>
-                <th style={{ textAlign: 'center', padding: '0 8px' }}>Comisión (%)</th>
-                <th style={{ textAlign: 'right', padding: '0 8px' }}>Comisión ($)</th>
-                <th style={{ textAlign: 'center', padding: '0 8px', width: '50px' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detalles
-                .filter(item => (subTab === 0 ? item.IdTipo === "2" : item.IdTipo === "1"))
-                .map((item, index) => (
-                  <tr key={item.IdDetalle} style={{ height: '36px', borderBottom: '1px solid #e0e0e0', backgroundColor: index % 2 === 0 ? '#f9fbfd' : '#fff' }}>
-                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#0066cc' }}>{index + 1}</td>
-                    <td style={{ padding: '0 8px', fontFamily: 'monospace' }}>{item.Codigo}</td>
-                    <td style={{ padding: '0 8px' }}>{item.Descripcion}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{item.Cantidad}</td>
-                    <td style={{ textAlign: 'right', padding: '0 8px' }}>${parseFloat(item.ValorUnitario).toLocaleString('es-CL')}</td>
-                    <td style={{ textAlign: 'center' }}>{item.DescuentoPorcentaje}%</td>
-                    <td style={{ textAlign: 'right', padding: '0 8px', fontWeight: 'bold', color: '#0056b3' }}>${parseFloat(item.SubTotal).toLocaleString('es-CL')}</td>
-                    <td style={{ textAlign: 'center' }}>0%</td>
-                    <td style={{ textAlign: 'right', padding: '0 8px' }}>$0</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <IconButton size="small" color="error" onClick={() => eliminarDetalle(item.IdDetalle)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </Box>
+        <TableContainer component={Paper} elevation={0} sx={{ width: '100%', overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 700 }}>
+            <TableHead sx={{ backgroundColor: '#0056b3' }}>
+              <TableRow>
+                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>N°</TableCell>
+                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Código</TableCell>
+                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Descripción / Servicio</TableCell>
+                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Cantidad</TableCell>
+                <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Valor Unit.</TableCell>
+                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Desc. (%)</TableCell>
+                <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Sub Total</TableCell>
+                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Comisión (%)</TableCell>
+                <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Comisión ($)</TableCell>
+                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {detallesFiltrados.map((item, index) => (
+                <TableRow key={item.IdDetalle} sx={{ backgroundColor: index % 2 === 0 ? '#f9fbfd' : '#fff' }}>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', color: '#0066cc' }}>{index + 1}</TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace' }}>{item.Codigo}</TableCell>
+                  <TableCell>{item.Descripcion}</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{item.Cantidad}</TableCell>
+                  <TableCell align="right">${parseFloat(item.ValorUnitario || 0).toLocaleString('es-CL')}</TableCell>
+                  <TableCell align="center">{item.DescuentoPorcentaje}%</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: '#0056b3' }}>
+                    ${parseFloat(item.SubTotal || 0).toLocaleString('es-CL')}
+                  </TableCell>
+                  <TableCell align="center">0%</TableCell>
+                  <TableCell align="right">$0</TableCell>
+                  <TableCell align="center">
+                    <IconButton size="small" color="error" onClick={() => eliminarDetalle(item.IdDetalle)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Box>
 
-      {/* PIE DE PANEL Y TOTALES */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 3, mt: 0.5, flexWrap: 'wrap-reverse' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: '400px' }}>
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-            <TextField label="Usuario crea OT" size="small" value={valores.UsuarioCrea || 'ADMINISTRADOR'} slotProps={{ input: { readOnly: true } }} sx={{ width: '160px' }} />
-            <Box sx={{ border: '1px solid #0066cc', borderRadius: '4px', p: '2px 10px', display: 'flex', alignItems: 'center', gap: 1, backgroundColor: '#f0f7ff' }}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#0066cc' }}>Abonado OT:</Typography>
+      {/* SECCIÓN ACCIONES Y TOTALES */}
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, justifyContent: 'space-between', alignItems: 'stretch', gap: 2, mt: 0.5 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, flex: 1, minWidth: { xs: '100%', lg: 'auto' } }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { xs: 'stretch', sm: 'center' } }}>
+            <TextField label="Usuario crea OT" size="small" value={valores.UsuarioCrea || 'ADMINISTRADOR'} slotProps={{ input: { readOnly: true } }} sx={{ width: { xs: '100%', sm: '160px' } }} />
+            <Box sx={{ border: '1px solid #0066cc', borderRadius: '4px', p: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, backgroundColor: '#f0f7ff' }}>
+              <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#0066cc', whiteSpace: 'nowrap' }}>Abonado OT:</Typography>
               <input
                 type="text"
                 value={valores.AbonadoOT || '0'}
                 onKeyDown={validarSoloNumerosKeyDown}
                 onChange={(e) => handleChange('AbonadoOT', e.target.value.replace(/[^0-9]/g, ''))}
-                style={{ width: '55px', border: '1px solid #ccc', borderRadius: '4px', textAlign: 'center', padding: '2px' }}
+                style={{ width: '60px', border: '1px solid #ccc', borderRadius: '4px', textAlign: 'center', padding: '2px' }}
               />
-              <Button variant="contained" color="success" size="small" sx={{ textTransform: 'none', py: 0.1, px: 1, fontSize: '11px' }}>Abonar $</Button>
+              <Button variant="contained" color="success" size="small" sx={{ textTransform: 'none', py: 0.1, px: 1, fontSize: '11px', whiteSpace: 'nowrap' }}>Abonar $</Button>
             </Box>
           </Box>
 
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic', pl: 0.5, fontSize: '11px' }}>
-            * Presione F5 para ingresar las series de los productos / Presione F6 para buscar productos por series.
-          </Typography>
-
-          <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-            <Button variant="contained" size="small" sx={{ backgroundColor: '#1976d2', textTransform: 'none', fontSize: '12px' }} startIcon={<SearchIcon />}>Buscar</Button>
-            <Button variant="outlined" size="small" sx={{ backgroundColor: '#757575', textTransform: 'none', fontSize: '12px' }} startIcon={<ClearIcon />} onClick={LimpiarFormulario}>Limpiar</Button>
-            <Button variant="contained" size="small" sx={{ backgroundColor: '#2e7d32', textTransform: 'none', fontSize: '12px' }} startIcon={<SaveIcon />} onClick={ConfirmarGuardarOrden}>Grabar</Button>
-            <Button variant="contained" size="small" sx={{ backgroundColor: '#d32f2f', textTransform: 'none', fontSize: '12px' }} startIcon={<BlockIcon />}>Anular</Button>
-            <Button variant="contained" size="small" sx={{ backgroundColor: '#37474f', textTransform: 'none', fontSize: '12px' }} startIcon={<PrintIcon />}>Imprimir</Button>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1, width: '100%' }}>
+            <Button
+              variant="contained"
+              size="small"
+              fullWidth
+              startIcon={<SearchIcon />}
+              onClick={() => handleAbrirBuscador('producto', 'Mantenedor de Productos')}
+              sx={{ backgroundColor: '#1e88e5', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { backgroundColor: '#1565c0' } }}
+            >
+              Buscar
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              fullWidth
+              startIcon={<DeleteIcon />}
+              onClick={LimpiarFormulario}
+              sx={{ color: '#546e7a', borderColor: '#cfd8dc', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { backgroundColor: '#eceff1' } }}
+            >
+              Limpiar
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              fullWidth
+              startIcon={<SaveIcon />}
+              onClick={() => setConfirmarGuardar(true)}
+              sx={{ backgroundColor: '#2e7d32', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { backgroundColor: '#1b5e20' } }}
+            >
+              Grabar
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              fullWidth
+              startIcon={<BlockIcon />}
+              sx={{ backgroundColor: '#d32f2f', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { backgroundColor: '#c62828' } }}
+            >
+              Anular
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              fullWidth
+              startIcon={<PrintIcon />}
+              onClick={handleImprimir}
+              sx={{ color: '#37474f', borderColor: '#b0bec5', textTransform: 'none', fontWeight: 600, borderRadius: '8px', gridColumn: { xs: 'span 2', sm: 'span 1' }, '@media print': { display: 'none' } }}
+            >
+              Imprimir
+            </Button>
           </Box>
         </Box>
 
-        <Box sx={{ border: '1px solid #ccc', borderRadius: '6px', p: 1.5, backgroundColor: '#f8fafc', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5, flexGrow: 1, maxWidth: '650px' }}>
-          <TextField label="Sub Total $" type="text" size="small" value={valores.SubTotal || '0'} slotProps={{ input: { readOnly: true } }} />
-          <TextField
-            label="Total Neto $"
-            type="text"
-            size="small"
-            value={valores.TotalNeto || '0'}
-            slotProps={{ input: { readOnly: true } }}
-          />
-          <TextField
-            label="Descuento (%)"
-            type="text"
-            size="small"
-            value={valores.DescuentoPorc || '0'}
-            onKeyDown={validarSoloNumerosKeyDown}
-            onChange={(e) => handleChange('DescuentoPorc', e.target.value)}
-          />
-          <TextField label="Total IVA $" type="text" size="small" value={valores.TotalIVA || '0'} slotProps={{ input: { readOnly: true } }} />
-          <TextField
-            label="Descuento $"
-            type="text"
-            size="small"
-            value={valores.DescuentoS || '0'}
-            slotProps={{ input: { readOnly: true } }}
-          />
-          <TextField label="Total OT $" type="text" size="small" value={valores.TotalOT || '0'} slotProps={{ input: { readOnly: true } }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', backgroundColor: '#e2e8f0' } }} />
+        <Box sx={{ border: '1px solid #ccc', borderRadius: '6px', p: 1.5, backgroundColor: '#f8fafc', display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 1.5, flex: 1, width: '100%' }}>
+          <TextField label="Sub Total $" type="text" size="small" fullWidth value={valores.SubTotal || '0'} slotProps={{ input: { readOnly: true } }} />
+          <TextField label="Total Neto $" type="text" size="small" fullWidth value={valores.TotalNeto || '0'} slotProps={{ input: { readOnly: true } }} />
+          <TextField label="Descuento (%)" type="text" size="small" fullWidth value={valores.DescuentoPorc || '0'} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('DescuentoPorc', e.target.value)} />
+          <TextField label="Total IVA $" type="text" size="small" fullWidth value={valores.TotalIVA || '0'} slotProps={{ input: { readOnly: true } }} />
+          <TextField label="Descuento $" type="text" size="small" fullWidth value={valores.DescuentoS || '0'} slotProps={{ input: { readOnly: true } }} />
+          <TextField label="Total OT $" type="text" size="small" fullWidth value={valores.TotalOT || '0'} slotProps={{ input: { readOnly: true } }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', backgroundColor: '#e2e8f0' } }} />
         </Box>
       </Box>
 
-      {/* BOTÓN GENERAL DE CERRAR */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
-        <Button variant="contained" size="small" sx={{ backgroundColor: '#212121', color: '#fff', px: 3, fontSize: '12px', '&:hover': { backgroundColor: '#424242' } }}>
+        <Button variant="contained" size="small" sx={{ backgroundColor: '#212121', color: '#fff', px: 3, width: { xs: '100%', sm: 'auto' }, fontSize: '12px', '&:hover': { backgroundColor: '#424242' } }}>
           X CERRAR
         </Button>
       </Box>
 
-
-      <Dialog open={confirmarGuardar} onClose={()=>setConfirmarGuardar(false)} maxWidth="xs" fullWidth>
+      {/* DIÁLOGOS DE CONFIRMACIÓN Y BÚSQUEDA */}
+      <Dialog open={confirmarGuardar} onClose={() => setConfirmarGuardar(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Confirmación</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            ¿Desea guardar este documento?
-          </DialogContentText>
+          <Typography variant="body2">¿Desea guardar este documento?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button variant="contained" color="success" onClick={async()=>{setConfirmarGuardar(false); await GuardarOrden();}}>Sí</Button>
-          <Button variant="outlined" onClick={()=>setConfirmarGuardar(false)}>No</Button>
+          <Button variant="contained" color="success" onClick={async () => { setConfirmarGuardar(false); await GuardarOrden(); }}>Sí</Button>
+          <Button variant="outlined" onClick={() => setConfirmarGuardar(false)}>No</Button>
         </DialogActions>
       </Dialog>
 
-      {/* --- DIÁLOGO / MODAL DE BÚSQUEDA INTEGRADO CON BASE DE DATOS --- */}
       <Dialog
         open={modalBuscar.abierto}
         onClose={() => { setModalBuscar({ abierto: false, tipo: '', titulo: '' }); setFiltroTexto(''); setDatosBusqueda([]); }}
         fullWidth
-        maxWidth="sm"
+        maxWidth={modalBuscar.tipo === 'producto' ? 'md' : 'sm'}
       >
-        <DialogTitle sx={{ fontWeight: 'bold', color: '#005cb2', fontSize: '16px' }}>
-          {modalBuscar.titulo}
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#005cb2', fontSize: '18px' }}>
+          {modalBuscar.titulo || 'Búsqueda'}
         </DialogTitle>
 
-        <DialogContent dividers sx={{ minHeight: '300px' }}>
-          <TextField
-            fullWidth
-            size="small"
-            label={`Buscar registros...`}
-            value={filtroTexto}
-            onChange={(e) => setFiltroTexto(e.target.value)}
-            sx={{ mb: 2 }}
-          />
+        <DialogContent dividers sx={{ minHeight: '350px', p: { xs: 1, sm: 2 } }}>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder={modalBuscar.tipo === 'producto' ? "Buscar por código o descripción..." : "Buscar cliente..."}
+              value={filtroTexto}
+              onChange={(e) => setFiltroTexto(e.target.value)}
+            />
+          </Box>
 
           {cargandoModal ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 5 }}>
               <CircularProgress size={35} />
             </Box>
+          ) : modalBuscar.tipo === 'producto' ? (
+            <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto', width: '100%' }}>
+              <Table size="small" sx={{ minWidth: 500 }}>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Nro</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Código</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Descripción</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Neto</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Bruto</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 'bold' }}>Ver / Seleccionar</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {datosBusqueda
+                    .filter(item => {
+                      const busqueda = (
+                        (item.codigo || item.Codigo || '') + ' ' +
+                        (item.descripcion || item.nombre || item.Descripcion || '')
+                      ).toLowerCase();
+                      return busqueda.includes(filtroTexto.toLowerCase());
+                    })
+                    .map((item, idx) => {
+                      const netoVal = parseFloat(item.Neto || item.precio || 0);
+                      const brutoVal = Math.round(netoVal * 1.19);
+
+                      return (
+                        <TableRow key={item.id || item.Id || idx} hover>
+                          <TableCell>{idx + 1}</TableCell>
+                          <TableCell sx={{ color: '#0066cc', fontWeight: 600, fontFamily: 'monospace' }}>
+                            {item.codigo || item.Codigo || '--'}
+                          </TableCell>
+                          <TableCell>{item.descripcion || item.nombre || item.Descripcion || 'Sin Descripción'}</TableCell>
+                          <TableCell>{item.Stock ?? item.stock ?? 0}</TableCell>
+                          <TableCell align="right">${netoVal.toLocaleString('es-CL')}</TableCell>
+                          <TableCell align="right">${brutoVal.toLocaleString('es-CL')}</TableCell>
+                          <TableCell align="center">
+                            <IconButton size="small" color="primary" onClick={() => handleSeleccionarElemento(item)}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+
+              {datosBusqueda.length === 0 && (
+                <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mt: 4 }}>
+                  No se encontraron productos registrados.
+                </Typography>
+              )}
+            </TableContainer>
           ) : (
             <List sx={{ maxHeight: '350px', overflowY: 'auto' }}>
               {datosBusqueda
-                ?.filter(item => {
+                .filter(item => {
                   const valorAFiltrar = (
                     item.nombre || item.Nombre ||
                     item.codigo || item.Codigo ||
@@ -798,7 +890,7 @@ const [listadobodega, setlistadobodega] = useState(listado);
                 .map((item, idx) => {
                   const primario = item.nombre || item.Nombre || item.Descripcion || item.Codigo || 'Sin Nombre';
                   const secundario = item.codigo || item.Codigo
-                    ? `Código: ${item.codigo || item.Codigo}`
+                    ? `Código/RUT: ${item.codigo || item.Codigo}`
                     : item.cargo || item.Cargo || '';
 
                   return (
@@ -815,14 +907,21 @@ const [listadobodega, setlistadobodega] = useState(listado);
                     </Box>
                   );
                 })}
-              {!cargandoModal && datosBusqueda.length === 0 && (
+
+              {datosBusqueda.length === 0 && (
                 <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mt: 4 }}>
-                  No se encontraron registros en la base de datos para esta selección.
+                  No se encontraron clientes o registros.
                 </Typography>
               )}
             </List>
           )}
         </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setModalBuscar({ abierto: false, tipo: '', titulo: '' })} color="inherit">
+            Cerrar
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

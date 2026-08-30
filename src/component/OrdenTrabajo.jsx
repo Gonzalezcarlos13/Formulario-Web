@@ -24,6 +24,7 @@ export default function OrdenTrabajo() {
   FechaIngreso: '2026-06-05',
   HoraIngreso: '14:54',
   HoraEntrega: '14:54',
+  IdBodega : "1",
   Bodega: 'INTERNA',
   IdVendedor: '1245',
   NombreVendedor: 'PAUL CELERY',
