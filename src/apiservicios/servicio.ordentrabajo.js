@@ -7,15 +7,21 @@ const OrdenTrabajoServicio = {};
 
 OrdenTrabajoServicio.CreateOrdenTrabajo = async (datos) => {
     let url = http_api + '/api/OrdenTrabajo/Crear';
+
+    // Mantiene la estructura recibida y valida la propiedad de imagenes
+    const payload = {
+        ...datos,
+        Imagenes: datos.Imagenes || datos.imagenes || []
+    };
  
     console.log("url :" + url);
-    console.log("json:" + JSON.stringify(datos));
+    console.log("json:" + JSON.stringify(payload));
     debugger;
 
     const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(datos)
+        body: JSON.stringify(payload)
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -42,6 +48,25 @@ OrdenTrabajoServicio.CrearImagenesOrdenTrabajo = async (imagen) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(imagen)
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+};
+
+
+
+OrdenTrabajoServicio.ObtenerOrdenesTrabajo = async (datos) => {
+    let url = http_api + '/api/OrdenTrabajo/Leer';
+ 
+    console.log("url :" + url);
+    console.log("json:" + JSON.stringify(datos));
+    debugger;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos)
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
