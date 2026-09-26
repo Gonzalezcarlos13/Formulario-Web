@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Box,
   Checkbox,
@@ -58,68 +58,56 @@ const listadoBodegasInicial = [
 
 const detallesTemporalesPorOT = new Map();
 const DETALLES_ELIMINADOS_STORAGE_KEY = 'OT_DETALLES_ELIMINADOS_VISUAL_V1';
-const ABONOS_VISUALES_STORAGE_KEY = 'OT_ABONOS_VISUALES_V1';
 
-const leerAbonosVisuales = () => {
+// Claves utilizadas para saber si una O.T. fue cargada desde Cartola.
+const CLAVE_OT_COMPARTIDA = 'cartolaOT_orden_compartida';
+const CLAVE_BLOQUEO_CARTOLA_GENERAR = 'generarOT_bloqueo_cartola';
+
+/*
+  Cada carga completa de la página obtiene un token distinto.
+  - Si Cartola carga una O.T. dentro de esta misma página, el token coincide
+    y Generar OT mantiene Limpiar/Grabar bloqueados.
+  - Si el usuario actualiza el navegador, window se recrea, cambia el token
+    y el bloqueo anterior deja de ser válido automáticamente.
+*/
+const obtenerTokenDocumentoOT = () => {
+  if (typeof window === 'undefined') return '';
+
+  if (!window.__OT_DOCUMENT_TOKEN__) {
+    window.__OT_DOCUMENT_TOKEN__ = `${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+  }
+
+  return window.__OT_DOCUMENT_TOKEN__;
+};
+
+const guardarBloqueoCartolaGenerar = (idOrden) => {
+  const id = String(idOrden || '').trim();
+  if (!id || typeof window === 'undefined') return;
+
   try {
-    const raw = localStorage.getItem(ABONOS_VISUALES_STORAGE_KEY);
+    sessionStorage.setItem(
+      CLAVE_BLOQUEO_CARTOLA_GENERAR,
+      JSON.stringify({
+        idOrden: id,
+        tokenDocumento: obtenerTokenDocumentoOT(),
+        creadoEn: Date.now()
+      })
+    );
+  } catch (_) {}
+};
 
-    if (!raw) {
-      return {};
+const limpiarBloqueoCartolaGenerar = (limpiarCompartida = false) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    sessionStorage.removeItem(CLAVE_BLOQUEO_CARTOLA_GENERAR);
+
+    if (limpiarCompartida) {
+      sessionStorage.removeItem(CLAVE_OT_COMPARTIDA);
     }
-
-    const data = JSON.parse(raw);
-
-    return data && typeof data === 'object'
-      ? data
-      : {};
-  } catch (_) {
-    return {};
-  }
-};
-
-const obtenerAbonoVisualOT = (idOrden) => {
-  const id = String(idOrden || '').trim();
-
-  if (!id) {
-    return '';
-  }
-
-  const abonos = leerAbonosVisuales();
-
-  return Object.prototype.hasOwnProperty.call(abonos, id)
-    ? String(abonos[id])
-    : '';
-};
-
-const guardarAbonoVisualOT = (idOrden, monto) => {
-  const id = String(idOrden || '').trim();
-
-  if (!id) {
-    return false;
-  }
-
-  try {
-    const abonos = leerAbonosVisuales();
-
-    abonos[id] = String(
-      Math.max(0, Math.round(Number(monto) || 0))
-    );
-
-    localStorage.setItem(
-      ABONOS_VISUALES_STORAGE_KEY,
-      JSON.stringify(abonos)
-    );
-
-    return true;
-  } catch (error) {
-    console.error(
-      '[OT] No fue posible guardar el abono visual:',
-      error
-    );
-
-    return false;
-  }
+  } catch (_) {}
 };
 
 const leerDetallesEliminados = () => {
@@ -172,6 +160,20 @@ const obtenerDetallesTemporales = (idOrden) => {
   return Array.isArray(guardados) ? guardados : [];
 };
 
+// Devuelve el primer identificador positivo válido.
+// En esta BD algunos registros tienen IdOrden = 0 y el identificador real está en Id.
+const obtenerIdPositivo = (...valores) => {
+  for (const valor of valores) {
+    const numero = Number(String(valor ?? '').trim());
+
+    if (Number.isFinite(numero) && numero > 0) {
+      return numero;
+    }
+  }
+
+  return 0;
+};
+
 export default function GenerarOT({ valores = {}, handleChange = () => { }, limpiarValores = () => { } }) {
   const [listadobodega] = useState(listadoBodegasInicial);
   const [, setListadoSucursales] = useState([]);
@@ -180,14 +182,62 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
   const [detalles, setDetalles] = useState(() =>
     obtenerDetallesTemporales(valores.IdOrden || valores.Idorden)
   );
+
+  const ultimaOTAutocargadaRef = useRef('');
+  const seleccionarElementoRef = useRef(null);
+
+  // ID real del registro en dbo.OrdenTrabajo (columna Id).
+  // Se conserva separado porque IdOrden puede venir en 0 desde la API.
+  const idRegistroBDRef = useRef('');
+
+  const idRegistroBDActual = obtenerIdPositivo(
+    idRegistroBDRef.current,
+    valores.IdRegistroBD,
+    valores.Id,
+    valores.id,
+    valores.IdOrden,
+    valores.Idorden
+  );
+
   const [imagenes] = useState([]);
   const [confirmarGuardar, setConfirmarGuardar] = useState(false);
+
+  // Si la O.T. viene desde Cartola, Generar OT queda solo para consulta.
+  const [soloLecturaCartola, setSoloLecturaCartola] = useState(false);
+
   const [detalleAEliminar, setDetalleAEliminar] = useState(null);
   const [modalAbono, setModalAbono] = useState(false);
   const [montoAbono, setMontoAbono] = useState('');
   const [errorAbono, setErrorAbono] = useState('');
   const [confirmarAccionAbono, setConfirmarAccionAbono] = useState(false);
   const [confirmarLimpiarAbono, setConfirmarLimpiarAbono] = useState(false);
+  const [guardandoAbono, setGuardandoAbono] = useState(false);
+
+  // Corrección manual del TOTAL abonado ya registrado.
+  const [modalActualizarAbono, setModalActualizarAbono] = useState(false);
+  const [montoActualizarAbono, setMontoActualizarAbono] = useState('');
+  const [errorActualizarAbono, setErrorActualizarAbono] = useState('');
+
+  // Confirmación especial cuando se intenta dejar el abono en $0.
+  // Se muestra al presionar "Aplicar" antes de modificar el valor en pantalla.
+  const [confirmarEliminarAbono, setConfirmarEliminarAbono] = useState(false);
+
+  // Indica que AbonadoOT cambió en pantalla, pero todavía no fue guardado en BD.
+  const [abonoPendienteGuardar, setAbonoPendienteGuardar] = useState(false);
+
+  // Guarda el valor exacto pendiente de persistir.
+  // IMPORTANTE: null = no hay cambio pendiente.
+  // 0 = sí existe un cambio pendiente y debe guardarse 0 en la BD.
+  const [valorAbonoPendiente, setValorAbonoPendiente] = useState(null);
+
+  // Confirmación antes de guardar el abono en la BD.
+  const [confirmarGuardarAbono, setConfirmarGuardarAbono] = useState(false);
+
+  // Alerta visual después de guardar correctamente el abono.
+  const [alertaAbonoGuardado, setAlertaAbonoGuardado] = useState({
+    abierto: false,
+    total: 0
+  });
 
   const [errores, setErrores] = useState({});
 
@@ -483,6 +533,14 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
     }
   };
 
+  const normalizarTextoBusqueda = (valor) =>
+    String(valor ?? '')
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+
   const ejecutarConsultaAPI = useCallback(async (tipo, textoBusqueda = '', signal) => {
     setCargandoModal(true);
     try {
@@ -498,13 +556,72 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
         const jsonResp = await resp.json();
         const items = Array.isArray(jsonResp) ? jsonResp : (jsonResp.data || Object.values(jsonResp) || []);
 
-        datos = items.map(item => ({
-          ...item,
-          nombre: item.nombre || item.Nombre || item.ClienteNombre || item.RazonSocial || '',
-          codigo: item.codigo || item.Codigo || item.IDCliente || item.RUT || '',
-          Descripcion: item.Descripcion || item.Direccion || '',
-          sucursal: item.sucursal || item.Sucursal || ''
-        }));
+        datos = items.map((item, index) => {
+          const nombreCliente =
+            item.nombre ||
+            item.Nombre ||
+            item.ClienteNombre ||
+            item.NombreCliente ||
+            item.RazonSocial ||
+            item.razonSocial ||
+            item.razonsocial ||
+            '';
+
+          const rutCliente =
+            item.RUT ||
+            item.Rut ||
+            item.rut ||
+            item.RUTCliente ||
+            item.RutCliente ||
+            item.rutCliente ||
+            item.ClienteRUT ||
+            item.ClienteRut ||
+            item.clienteRut ||
+            item.CodigoRut ||
+            item.codigoRut ||
+            item.RutEmpresa ||
+            item.rutEmpresa ||
+            item.codigo ||
+            item.Codigo ||
+            '';
+
+          const idCliente =
+            item.IDCliente ||
+            item.IdCliente ||
+            item.idCliente ||
+            item.Id ||
+            item.id ||
+            index + 1;
+
+          return {
+            ...item,
+            id: idCliente,
+            nombre: nombreCliente,
+
+            // RUT normalizado para que siempre se muestre en el modal.
+            rut: String(rutCliente || '').trim(),
+            Rut: String(rutCliente || '').trim(),
+            RUT: String(rutCliente || '').trim(),
+
+            // Mantengo codigo para no romper la selección existente.
+            codigo: String(rutCliente || '').trim(),
+            Codigo: String(rutCliente || '').trim(),
+
+            Descripcion:
+              item.Descripcion ||
+              item.descripcion ||
+              item.Direccion ||
+              item.direccion ||
+              '',
+
+            sucursal:
+              item.sucursal ||
+              item.Sucursal ||
+              item.IdSucursal ||
+              item.idSucursal ||
+              ''
+          };
+        });
       } else if (tipo === 'producto') {
         const resp = await fetch(`${BASE_API_URL}/productos.php/getAllProductos`, {
           method: 'POST',
@@ -552,41 +669,213 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
         });
       } else if (tipo === 'productosBD') {
         const urlAPI = 'http://localhost/Api/api/OrdenTrabajo/Leer/0';
-        const resp = await fetch(urlAPI, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-          signal
+
+        const [respOT, respClientes] = await Promise.all([
+          fetch(urlAPI, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json'
+            },
+            signal
+          }),
+          fetch(`${BASE_API_URL}/clientes.php/getAllClientes`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              idsucursal: '1',
+              busqueda: '',
+              id: 0
+            }),
+            signal
+          })
+        ]);
+
+        if (!respOT.ok) {
+          throw new Error(`HTTP ${respOT.status} al consultar O.T.`);
+        }
+
+        const jsonOT = await respOT.json();
+
+        const items = Array.isArray(jsonOT)
+          ? jsonOT
+          : (
+              jsonOT?.data ||
+              jsonOT?.listado ||
+              jsonOT?.result ||
+              Object.values(jsonOT || {}) ||
+              []
+            );
+
+        let clientes = [];
+
+        if (respClientes.ok) {
+          const jsonClientes = await respClientes.json();
+
+          clientes = Array.isArray(jsonClientes)
+            ? jsonClientes
+            : (
+                jsonClientes?.data ||
+                Object.values(jsonClientes || {}) ||
+                []
+              );
+        }
+
+        const clientesPorNombre = new Map();
+
+        clientes.forEach((clienteItem) => {
+          const nombreCliente =
+            clienteItem.nombre ||
+            clienteItem.Nombre ||
+            clienteItem.ClienteNombre ||
+            clienteItem.RazonSocial ||
+            clienteItem.Razon_Social ||
+            '';
+
+          const rutCliente =
+            clienteItem.RUT ||
+            clienteItem.Rut ||
+            clienteItem.rut ||
+            clienteItem.codigo ||
+            clienteItem.Codigo ||
+            '';
+
+          const claveNombre =
+            normalizarTextoBusqueda(nombreCliente);
+
+          if (claveNombre && rutCliente) {
+            clientesPorNombre.set(
+              claveNombre,
+              String(rutCliente).trim()
+            );
+          }
         });
 
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const json = await resp.json();
+        const datosOT = items.map((item, index) => {
+          const idOt =
+            item.IdOrden ||
+            item.idOrden ||
+            item.Id ||
+            item.id ||
+            (index + 1);
 
-        const items = Array.isArray(json) ? json : (json.data || json.listado || json.result || Object.values(json) || []);
+          const cliente =
+            item.NombreCliente ||
+            item.Cliente ||
+            item.RazonSocial ||
+            '';
 
-        datos = items.map((item, index) => {
-          const idOt = item.IdOrden || item.idOrden || item.Id || item.id || (index + 1);
-          const cliente = item.NombreCliente || item.Cliente || item.RazonSocial || '';
-          const detalle = item.Observaciones || item.Descripcion || item.Detalle || item.EstadoOT || '';
+          const detalle =
+            item.Observaciones ||
+            item.Descripcion ||
+            item.Detalle ||
+            item.EstadoOT ||
+            '';
 
-          let descripcionFormateada = [cliente, detalle].filter(Boolean).join(' - ');
-          if (!descripcionFormateada) descripcionFormateada = `Orden de Trabajo N° ${idOt}`;
+          let descripcionFormateada =
+            [cliente, detalle]
+              .filter(Boolean)
+              .join(' - ');
 
-          const valorMonto = parseFloat(item.TotalOT ?? item.TotalNeto ?? item.SubTotal ?? item.Monto ?? item.Neto ?? 0);
-          const stockVal = parseInt(item.Cantidad ?? item.Stock ?? 1, 10);
+          if (!descripcionFormateada) {
+            descripcionFormateada =
+              `Orden de Trabajo N° ${idOt}`;
+          }
+
+          const rutDirecto =
+            item.RUT ||
+            item.Rut ||
+            item.rut ||
+            item.RUTCliente ||
+            item.RutCliente ||
+            item.rutCliente ||
+            item.ClienteRUT ||
+            item.ClienteRut ||
+            item.Rut_Cliente ||
+            '';
+
+          const rutCliente =
+            String(
+              rutDirecto ||
+              clientesPorNombre.get(
+                normalizarTextoBusqueda(cliente)
+              ) ||
+              ''
+            ).trim();
+
+          const valorMonto = parseFloat(
+            item.TotalOT ??
+            item.TotalNeto ??
+            item.SubTotal ??
+            item.Monto ??
+            item.Neto ??
+            0
+          );
+
+          const stockVal = parseInt(
+            item.Cantidad ??
+            item.Stock ??
+            1,
+            10
+          );
 
           return {
             ...item,
+            IdRegistroBD: obtenerIdPositivo(
+              item.Id,
+              item.id,
+              idOt
+            ),
             id: idOt,
+
+            // El código OT se mantiene para no romper la selección
+            // ni la carga posterior de la orden.
             codigo: `OT-${idOt}`,
+            Codigo: `OT-${idOt}`,
+
+            // RUT separado para mostrarlo en la ventana Buscar.
+            rut: rutCliente,
+            Rut: rutCliente,
+            RUT: rutCliente,
+
             nombre: descripcionFormateada,
             descripcion: descripcionFormateada,
             Descripcion: descripcionFormateada,
+
             stock: stockVal,
             Stock: stockVal,
+
             neto: valorMonto,
             Neto: valorMonto
           };
         });
+
+        const termino =
+          normalizarTextoBusqueda(textoBusqueda);
+
+        datos = termino
+          ? datosOT.filter((item) => {
+              const valores = [
+                item.rut,
+                item.RUT,
+                item.codigo,
+                item.Codigo,
+                item.nombre,
+                item.descripcion,
+                item.NombreCliente,
+                item.Cliente,
+                item.IdOrden,
+                item.id
+              ];
+
+              return valores.some((valor) =>
+                normalizarTextoBusqueda(valor)
+                  .includes(termino)
+              );
+            })
+          : datosOT;
       }
       setDatosBusqueda(datos);
     } catch (error) {
@@ -600,6 +889,16 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
   }, []);
 
   const handleAbrirBuscador = (tipo, titulo) => {
+    /*
+      Si el usuario inicia una búsqueda de O.T. desde Generar OT,
+      deja de estar trabajando con la O.T. protegida que vino desde Cartola.
+      Desde este momento Limpiar y Grabar vuelven a estar disponibles.
+    */
+    if (tipo === 'productosBD') {
+      setSoloLecturaCartola(false);
+      limpiarBloqueoCartolaGenerar(true);
+    }
+
     setFiltroTexto('');
     setDatosBusqueda([]);
     setModalBuscar({ abierto: true, tipo, titulo });
@@ -623,7 +922,24 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
     return datosBusqueda.slice(0, 50);
   }, [datosBusqueda]);
 
-  const handleSeleccionarElemento = async (item) => {
+  const handleSeleccionarElemento = async (
+    item,
+    tipoForzado = null
+  ) => {
+    const tipoSeleccion =
+      tipoForzado || modalBuscar.tipo;
+
+    /*
+      Si la O.T. se está eligiendo directamente desde el buscador
+      de Generar OT, salimos del modo consulta Cartola.
+    */
+    if (
+      tipoForzado === null &&
+      tipoSeleccion === 'productosBD'
+    ) {
+      setSoloLecturaCartola(false);
+      limpiarBloqueoCartolaGenerar(true);
+    }
 
     const normalizarClave = (clave) =>
       String(clave || '')
@@ -921,7 +1237,7 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
       return recorrer(raiz);
     };
 
-    if (modalBuscar.tipo === 'cliente') {
+    if (tipoSeleccion === 'cliente') {
       const clienteNombre =
         buscarValorProfundo(item, [
           'NombreCliente',
@@ -1044,20 +1360,43 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
       setDatosBusqueda([]);
       setFiltroTexto('');
 
-    } else if (modalBuscar.tipo === 'productosBD') {
-      const idOrdenSeleccionada =
-        item.IdOrden ??
-        item.idOrden ??
-        item.IDOrden ??
-        item.Id ??
-        item.id;
+    } else if (tipoSeleccion === 'productosBD') {
+      /*
+        IMPORTANTE:
+        En dbo.OrdenTrabajo hay registros donde IdOrden = 0 y el ID real
+        del registro es la columna Id (por ejemplo Id = 77). Por eso
+        preferimos Id/IdRegistroBD antes que IdOrden.
+      */
+      const idRegistroBD = obtenerIdPositivo(
+        item.IdRegistroBD,
+        item.Id,
+        item.id,
+        item.IdOrden,
+        item.idOrden,
+        item.IDOrden
+      );
+
+      const idOrdenVisible = obtenerIdPositivo(
+        item.IdOrden,
+        item.idOrden,
+        item.IDOrden,
+        idRegistroBD
+      );
+
+      const idOrdenSeleccionada = idRegistroBD || idOrdenVisible;
 
       try {
         const idSeleccionado = String(idOrdenSeleccionada || '').trim();
 
         if (!idSeleccionado) {
-          throw new Error('La Orden de Trabajo seleccionada no tiene IdOrden.');
+          throw new Error('La Orden de Trabajo seleccionada no tiene un identificador válido.');
         }
+
+        idRegistroBDRef.current = String(idRegistroBD || idOrdenSeleccionada);
+        handleChange('IdRegistroBD', String(idRegistroBD || idOrdenSeleccionada));
+
+        // Evita una segunda carga automática de la misma O.T.
+        ultimaOTAutocargadaRef.current = idSeleccionado;
 
         setDetalles([]);
         setErrores({});
@@ -1526,21 +1865,11 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
           'abonadoOT'
         ]);
 
-        const abonadoVisualGuardado =
-          obtenerAbonoVisualOT(idOrdenSeleccionada);
-
-        if (tieneValor(abonadoVisualGuardado)) {
-          handleChange(
-            'AbonadoOT',
-            String(abonadoVisualGuardado)
-          );
-        } else if (tieneValor(abonadoOT)) {
+        if (tieneValor(abonadoOT)) {
           handleChange(
             'AbonadoOT',
             String(abonadoOT)
           );
-        } else {
-          handleChange('AbonadoOT', '0');
         }
 
         const bodegaAPI = obtenerCampoOT([
@@ -1853,7 +2182,7 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
         setFiltroTexto('');
       }
 
-    } else if (modalBuscar.tipo === 'producto') {
+    } else if (tipoSeleccion === 'producto') {
       const cod = item.codigo || item.Codigo || '';
       const desc = item.descripcion || item.nombre || item.Descripcion || '';
       const netoVal =
@@ -1922,6 +2251,166 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
       e.preventDefault();
     }
   };
+
+
+  // Mantener siempre disponible la versión más reciente del cargador.
+  seleccionarElementoRef.current = handleSeleccionarElemento;
+
+  /*
+    SINCRONIZACIÓN CARTOLA -> GENERAR OT
+
+    Cuando en Cartola se presiona "Cargar", la O.T. queda en el
+    formulario compartido. Este bloque hace que GenerarOT reutilice
+    su recuperación normal de "productosBD" y traiga también:
+      - productos guardados
+      - cantidades
+      - valores
+      - descuentos
+      - subtotales
+      - totales de la O.T.
+
+    No crea endpoints ni modifica backend/BD.
+  */
+  useEffect(() => {
+    const manejarOrdenDesdeCartola = (event) => {
+      const detalleEvento = event?.detail || {};
+
+      const idOrden = String(
+        detalleEvento.idOrden ||
+        detalleEvento.item?.IdOrden ||
+        detalleEvento.item?.Idorden ||
+        detalleEvento.item?.Id ||
+        ''
+      ).trim();
+
+      if (!idOrden) {
+        return;
+      }
+
+      const itemOrden = {
+        ...(detalleEvento.item || {}),
+        IdOrden: idOrden,
+        idOrden: idOrden,
+        IDOrden: idOrden,
+        Id: idOrden
+      };
+
+      // Esta O.T. viene desde Cartola: Generar OT queda en modo consulta.
+      setSoloLecturaCartola(true);
+      guardarBloqueoCartolaGenerar(idOrden);
+
+      if (seleccionarElementoRef.current) {
+        seleccionarElementoRef.current(
+          itemOrden,
+          'productosBD'
+        );
+      }
+    };
+
+    window.addEventListener(
+      'ot:seleccionar-desde-cartola',
+      manejarOrdenDesdeCartola
+    );
+
+    return () => {
+      window.removeEventListener(
+        'ot:seleccionar-desde-cartola',
+        manejarOrdenDesdeCartola
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    const idOrdenActual = String(
+      valores.IdOrden ||
+      valores.Idorden ||
+      ''
+    ).trim();
+
+    if (!idOrdenActual) {
+      ultimaOTAutocargadaRef.current = '';
+      setSoloLecturaCartola(false);
+      return;
+    }
+
+    /*
+      Si GenerarOT se monta después de que Cartola cargó la O.T.,
+      el evento ya pudo haber ocurrido. Por eso Cartola deja un marcador
+      temporal. El marcador solamente es válido dentro de la MISMA carga
+      de la página. Después de F5/recargar, el token cambia y los botones
+      quedan habilitados, que es el comportamiento solicitado.
+    */
+    try {
+      const rawBloqueo = sessionStorage.getItem(
+        CLAVE_BLOQUEO_CARTOLA_GENERAR
+      );
+
+      if (rawBloqueo) {
+        const bloqueo = JSON.parse(rawBloqueo);
+        const idCartola = String(
+          bloqueo?.idOrden ||
+          bloqueo?.IdOrden ||
+          bloqueo?.Idorden ||
+          ''
+        ).trim();
+
+        const esMismoDocumento =
+          bloqueo?.tokenDocumento === obtenerTokenDocumentoOT();
+
+        if (
+          esMismoDocumento &&
+          idCartola &&
+          idCartola === idOrdenActual
+        ) {
+          setSoloLecturaCartola(true);
+        } else {
+          // Bloqueo antiguo (por ejemplo, después de actualizar la página).
+          limpiarBloqueoCartolaGenerar(false);
+          setSoloLecturaCartola(false);
+        }
+      } else {
+        setSoloLecturaCartola(false);
+      }
+    } catch (error) {
+      console.warn(
+        '[OT] No fue posible verificar el origen Cartola:',
+        error
+      );
+      limpiarBloqueoCartolaGenerar(false);
+      setSoloLecturaCartola(false);
+    }
+
+    // Si ya fue cargada por el buscador normal o por Cartola, no repetir.
+    if (
+      ultimaOTAutocargadaRef.current ===
+      idOrdenActual
+    ) {
+      return;
+    }
+
+    ultimaOTAutocargadaRef.current =
+      idOrdenActual;
+
+    /*
+      Esto cubre el caso donde GenerarOT estaba desmontado/oculto
+      mientras se eligió la O.T. en Cartola. Al entrar a esta pestaña,
+      se recuperan automáticamente también sus productos.
+    */
+    if (seleccionarElementoRef.current) {
+      seleccionarElementoRef.current(
+        {
+          IdOrden: idOrdenActual,
+          idOrden: idOrdenActual,
+          IDOrden: idOrdenActual,
+          Id: idOrdenActual
+        },
+        'productosBD'
+      );
+    }
+  }, [
+    valores.IdOrden,
+    valores.Idorden
+  ]);
 
   const agregarProductoALaTabla = () => {
     const codigo = valores.TmpProductoCodigo || '';
@@ -2038,6 +2527,11 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
     return Number.isFinite(numero) ? Math.round(numero) : 0;
   };
 
+  // Formato visual chileno para montos: 468061 -> 468.061
+  // Solo afecta la presentación; los valores internos siguen siendo numéricos.
+  const formatearMontoCL = (valor) =>
+    obtenerMontoNumerico(valor).toLocaleString('es-CL');
+
   const abonadoActual = obtenerMontoNumerico(valores.AbonadoOT || 0);
   const totalOrdenAbono = obtenerMontoNumerico(valores.TotalOT || 0);
   const saldoPendienteAbono = Math.max(
@@ -2058,19 +2552,6 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
   );
 
   const abrirModalAbono = () => {
-    const idOrdenActual = String(
-      valores.IdOrden ||
-      valores.Idorden ||
-      ''
-    ).trim();
-
-    if (!idOrdenActual) {
-      alert(
-        'Primero debe buscar o cargar una Orden de Trabajo.'
-      );
-      return;
-    }
-
     setMontoAbono('');
     setErrorAbono('');
     setModalAbono(true);
@@ -2110,71 +2591,228 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
     setConfirmarAccionAbono(true);
   };
 
-  const solicitarLimpiarAbono = () => {
-    const idOrdenActual = String(
-      valores.IdOrden ||
-      valores.Idorden ||
-      ''
-    ).trim();
+  const extraerAbonadoRespuesta = (respuesta) => {
+    const visitados = new WeakSet();
 
-    if (!idOrdenActual) {
-      alert(
-        'Primero debe buscar o cargar una Orden de Trabajo.'
-      );
-      return;
-    }
+    const recorrer = (valor) => {
+      if (
+        valor === null ||
+        valor === undefined
+      ) {
+        return undefined;
+      }
 
-    if (abonadoActual <= 0) {
-      return;
-    }
+      if (typeof valor !== 'object') {
+        return undefined;
+      }
 
-    setConfirmarLimpiarAbono(true);
+      if (visitados.has(valor)) {
+        return undefined;
+      }
+
+      visitados.add(valor);
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          valor,
+          'AbonadoOT'
+        )
+      ) {
+        return valor.AbonadoOT;
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          valor,
+          'abonadoOT'
+        )
+      ) {
+        return valor.abonadoOT;
+      }
+
+      const elementos = Array.isArray(valor)
+        ? valor
+        : Object.values(valor);
+
+      for (const item of elementos) {
+        const encontrado = recorrer(item);
+
+        if (encontrado !== undefined) {
+          return encontrado;
+        }
+      }
+
+      return undefined;
+    };
+
+    return recorrer(respuesta);
   };
 
-  const confirmarLimpiezaAbono = () => {
-    const idOrdenActual = String(
-      valores.IdOrden ||
-      valores.Idorden ||
-      ''
-    ).trim();
 
-    if (!idOrdenActual) {
-      setConfirmarLimpiarAbono(false);
-      return;
+  const leerAbonoPersistido = async (
+    idOrden,
+    mostrarError = true
+  ) => {
+    const id = Number(idOrden || 0);
+
+    if (!id) {
+      return 0;
     }
 
-    const guardadoVisual = guardarAbonoVisualOT(
-      idOrdenActual,
+    const response = await fetch(
+      `http://localhost/Api/api/OrdenTrabajo/LeerAbono/${encodeURIComponent(
+        id
+      )}`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const detalle = await response
+        .text()
+        .catch(() => '');
+
+      if (mostrarError) {
+        if (response.status === 404) {
+          throw new Error(
+            'La ruta LeerAbono todavía no está publicada en la API. ' +
+            'Recompile y publique OrdenTrabajoController antes de probar.'
+          );
+        }
+
+        throw new Error(
+          `No se pudo leer el abono guardado. HTTP ${response.status}${
+            detalle ? ` - ${detalle}` : ''
+          }`
+        );
+      }
+
+      return null;
+    }
+
+    const respuesta = await response
+      .json()
+      .catch(() => null);
+
+    return obtenerMontoNumerico(
+      respuesta?.AbonadoOT ??
+      respuesta?.abonadoOT ??
       0
     );
-
-    if (!guardadoVisual) {
-      setConfirmarLimpiarAbono(false);
-
-      alert(
-        'No fue posible reiniciar el abono de esta Orden de Trabajo.'
-      );
-
-      return;
-    }
-
-    handleChange(
-      'AbonadoOT',
-      '0'
-    );
-
-    setMontoAbono('');
-    setErrorAbono('');
-    setConfirmarAccionAbono(false);
-    setConfirmarLimpiarAbono(false);
   };
 
-  const confirmarAbonoOT = () => {
-    const monto = obtenerMontoNumerico(montoAbono);
+  const guardarAbonoPersistente = async (
+    nuevoAbonado
+  ) => {
+    const idOrden = idRegistroBDActual;
+
+    if (!idOrden) {
+      throw new Error(
+        'Primero debe cargar una Orden de Trabajo existente.'
+      );
+    }
+
+    const totalGuardar = Math.max(
+      0,
+      Math.round(
+        Number(nuevoAbonado) || 0
+      )
+    );
+
+    /*
+      IMPORTANTE:
+      Para guardar un abono NO usamos /Actualizar general.
+
+      /Actualizar llama a ActualizarOrdenTrabajoAsync y en tu API
+      está devolviendo false, por eso recibías HTTP 500.
+
+      Esta ruta modifica únicamente AbonadoOT.
+    */
+    const response = await fetch(
+      'http://localhost/Api/api/OrdenTrabajo/ActualizarAbono',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({
+          // Enviamos ambos nombres para que el backend pueda trabajar
+          // con la PK real (Id) sin romper compatibilidad con el DTO actual.
+          Id: idOrden,
+          IdOrden: idOrden,
+          AbonadoOT: totalGuardar
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const detalle = await response
+        .text()
+        .catch(() => '');
+
+      if (response.status === 404) {
+        throw new Error(
+          'La ruta ActualizarAbono todavía no está publicada en la API. ' +
+          'Recompile y publique OrdenTrabajoController antes de probar.'
+        );
+      }
+
+      throw new Error(
+        `No se pudo guardar el abono. HTTP ${response.status}${
+          detalle ? ` - ${detalle}` : ''
+        }`
+      );
+    }
+
+    const respuesta = await response
+      .json()
+      .catch(() => null);
+
+    const abonadoRespuesta =
+      obtenerMontoNumerico(
+        respuesta?.AbonadoOT ??
+        respuesta?.abonadoOT ??
+        totalGuardar
+      );
+
+    /*
+      Verificación real contra la BD.
+    */
+    const abonadoVerificado =
+      await leerAbonoPersistido(
+        idOrden,
+        true
+      );
+
+    if (
+      abonadoVerificado !==
+      totalGuardar
+    ) {
+      throw new Error(
+        `El servidor respondió correctamente, pero AbonadoOT quedó en ${abonadoVerificado} y debía quedar en ${totalGuardar}.`
+      );
+    }
+
+    // Devolvemos el valor leído nuevamente desde la BD.
+    // Así la pantalla refleja exactamente lo que quedó persistido.
+    return abonadoVerificado;
+  };
+
+  const confirmarAbonoOT = async () => {
+    const monto = obtenerMontoNumerico(
+      montoAbono
+    );
 
     if (monto <= 0) {
       setConfirmarAccionAbono(false);
-      setErrorAbono('Ingresa un monto mayor a 0.');
+      setErrorAbono(
+        'Ingresa un monto mayor a 0.'
+      );
       return;
     }
 
@@ -2189,44 +2827,282 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
       return;
     }
 
-    const idOrdenActual = String(
-      valores.IdOrden ||
-      valores.Idorden ||
-      ''
-    ).trim();
+    const nuevoAbonado =
+      abonadoActual + monto;
 
-    if (!idOrdenActual) {
-      setConfirmarAccionAbono(false);
-      setErrorAbono(
-        'Primero debe cargar una Orden de Trabajo.'
+    /*
+      Un abono nuevo se guarda inmediatamente en la BD
+      al presionar "Confirmar".
+      Por eso NO queda pendiente para el botón "Guardar".
+    */
+    setGuardandoAbono(true);
+
+    try {
+      const abonadoGuardado =
+        await guardarAbonoPersistente(
+          nuevoAbonado
+        );
+
+      handleChange(
+        'AbonadoOT',
+        String(abonadoGuardado)
       );
-      return;
-    }
 
-    const nuevoAbonado = abonadoActual + monto;
+      // El abono nuevo ya quedó persistido.
+      setAbonoPendienteGuardar(false);
+      setValorAbonoPendiente(null);
 
-    const guardadoVisual = guardarAbonoVisualOT(
-      idOrdenActual,
-      nuevoAbonado
-    );
-
-    if (!guardadoVisual) {
       setConfirmarAccionAbono(false);
+      setModalAbono(false);
+      setMontoAbono('');
+      setErrorAbono('');
+
+      setAlertaAbonoGuardado({
+        abierto: true,
+        total: abonadoGuardado
+      });
+    } catch (error) {
+      console.error(
+        '[OT] Error guardando nuevo abono:',
+        error
+      );
+
+      setConfirmarAccionAbono(false);
+
+      setErrorAbono(
+        error.message ||
+        'No fue posible guardar el abono.'
+      );
 
       alert(
-        'No fue posible conservar el abono en el navegador.'
+        `No fue posible guardar el abono: ${
+          error.message ||
+          'Error desconocido'
+        }`
       );
+    } finally {
+      setGuardandoAbono(false);
+    }
+  };
 
+  const solicitarLimpiarAbono = () => {
+    if (abonadoActual <= 0) {
       return;
     }
 
+    setConfirmarLimpiarAbono(true);
+  };
+
+  const confirmarLimpiezaAbono = async () => {
     handleChange(
       'AbonadoOT',
-      String(nuevoAbonado)
+      '0'
     );
 
-    cerrarModalAbono();
+    setMontoAbono('');
+    setErrorAbono('');
+    setConfirmarAccionAbono(false);
+    setConfirmarLimpiarAbono(false);
+
+    // 0 es un valor válido y debe persistirse en la BD.
+    setValorAbonoPendiente(0);
+    setAbonoPendienteGuardar(true);
   };
+
+  const abrirActualizarAbono = () => {
+    setMontoActualizarAbono(
+      String(abonadoActual)
+    );
+    setErrorActualizarAbono('');
+    setModalActualizarAbono(true);
+  };
+
+  const cerrarActualizarAbono = () => {
+    if (guardandoAbono) {
+      return;
+    }
+
+    setModalActualizarAbono(false);
+    setErrorActualizarAbono('');
+  };
+
+  // Aplica el valor corregido en pantalla.
+  // La persistencia definitiva sigue realizándose con el botón "Guardar".
+  const aplicarNuevoTotalAbonado = (nuevoTotal) => {
+    handleChange(
+      'AbonadoOT',
+      String(nuevoTotal)
+    );
+
+    // Guardamos el valor exacto pendiente, incluido 0.
+    setValorAbonoPendiente(nuevoTotal);
+    setAbonoPendienteGuardar(true);
+
+    setModalActualizarAbono(false);
+    setConfirmarEliminarAbono(false);
+    setErrorActualizarAbono('');
+  };
+
+  const confirmarActualizarAbono = async () => {
+    const nuevoTotal =
+      obtenerMontoNumerico(
+        montoActualizarAbono
+      );
+
+    if (nuevoTotal < 0) {
+      setErrorActualizarAbono(
+        'El total abonado no puede ser negativo.'
+      );
+      return;
+    }
+
+    if (
+      totalOrdenAbono > 0 &&
+      nuevoTotal > totalOrdenAbono
+    ) {
+      setErrorActualizarAbono(
+        'El total abonado no puede superar el total de la O.T.'
+      );
+      return;
+    }
+
+    /*
+      Si el usuario presiona "Aplicar" con el nuevo total en 0,
+      NO aplicamos todavía el cambio.
+
+      Primero mostramos SIEMPRE una alerta de confirmación,
+      aunque el valor visual actual ya aparezca en $0.
+    */
+    if (nuevoTotal === 0) {
+      setConfirmarEliminarAbono(true);
+      return;
+    }
+
+    // Para cualquier otro valor, se mantiene el comportamiento normal.
+    aplicarNuevoTotalAbonado(nuevoTotal);
+  };
+
+  const confirmarEliminarAbonoEnCero = () => {
+    // Aquí el usuario ya confirmó expresamente que desea dejarlo en 0.
+    aplicarNuevoTotalAbonado(0);
+  };
+
+  const cancelarEliminarAbonoEnCero = () => {
+    // Cerramos solamente la alerta de confirmación.
+    // El modal "Actualizar abono" permanece abierto para poder corregir el valor.
+    setConfirmarEliminarAbono(false);
+  };
+
+  const dejarAbonoEnCero = () => {
+    setMontoActualizarAbono('0');
+    setErrorActualizarAbono('');
+  };
+
+  const guardarAbonoActualEnBD = async () => {
+    const idOrden = idRegistroBDActual;
+
+    if (!idOrden) {
+      alert(
+        'Primero debe cargar una Orden de Trabajo existente.'
+      );
+      return;
+    }
+
+    const totalAbonadoActual =
+      valorAbonoPendiente !== null
+        ? obtenerMontoNumerico(valorAbonoPendiente)
+        : obtenerMontoNumerico(valores.AbonadoOT || 0);
+
+    setGuardandoAbono(true);
+
+    try {
+      const abonadoGuardado =
+        await guardarAbonoPersistente(
+          totalAbonadoActual
+        );
+
+      handleChange(
+        'AbonadoOT',
+        String(abonadoGuardado)
+      );
+
+      setAbonoPendienteGuardar(false);
+      setValorAbonoPendiente(null);
+
+      // Mostramos una alerta visual más ordenada en vez del alert() del navegador.
+      setAlertaAbonoGuardado({
+        abierto: true,
+        total: abonadoGuardado
+      });
+    } catch (error) {
+      console.error(
+        '[OT] Error guardando AbonadoOT:',
+        error
+      );
+
+      alert(
+        `No fue posible guardar el abono: ${
+          error.message ||
+          'Error desconocido'
+        }`
+      );
+    } finally {
+      setGuardandoAbono(false);
+    }
+  };
+
+  /*
+    Cada vez que se carga/cambia una O.T., traemos directamente
+    el AbonadoOT persistido en la BD. Así, al volver a OT-77,
+    por ejemplo, no aparece 0 si ya existía un abono guardado.
+  */
+  useEffect(() => {
+    const idOrden = idRegistroBDActual;
+
+    if (!idOrden) {
+      return;
+    }
+
+    let activo = true;
+
+    const cargar = async () => {
+      try {
+        const abonadoBD =
+          await leerAbonoPersistido(
+            idOrden,
+            false
+          );
+
+        if (
+          activo &&
+          abonadoBD !== null &&
+          abonadoBD !== undefined &&
+          abonadoBD !== abonadoActual
+        ) {
+          handleChange(
+            'AbonadoOT',
+            String(abonadoBD)
+          );
+
+          setAbonoPendienteGuardar(false);
+          setValorAbonoPendiente(null);
+        }
+      } catch (error) {
+        console.warn(
+          '[OT] No fue posible recuperar AbonadoOT:',
+          error
+        );
+      }
+    };
+
+    cargar();
+
+    return () => {
+      activo = false;
+    };
+  }, [
+    idRegistroBDActual
+  ]);
 
   const validarCamposObligatorios = () => {
     const nuevosErrores = {
@@ -2243,6 +3119,10 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
   };
 
   const handleIntentarGuardar = () => {
+    if (soloLecturaCartola) {
+      return;
+    }
+
     const esValido = validarCamposObligatorios();
     if (esValido) {
       setConfirmarGuardar(true);
@@ -2252,6 +3132,11 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
   };
 
   const GuardarOrden = async () => {
+    if (soloLecturaCartola) {
+      setConfirmarGuardar(false);
+      return;
+    }
+
     try {
       console.log('[OT] FECHAS/HORAS QUE SE GUARDARÁN:', {
         FechaRealEntrega: valores.FechaRealEntrega || valores.FechaRealEntregaOT || '',
@@ -2322,6 +3207,11 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
   };
 
   const LimpiarFormulario = () => {
+    // Limpiar siempre está permitido, incluso si la O.T. viene desde Cartola.
+    // Al limpiar salimos del modo consulta y eliminamos el bloqueo temporal.
+    setSoloLecturaCartola(false);
+    limpiarBloqueoCartolaGenerar(true);
+
     const idOrdenActual = String(valores.IdOrden || valores.Idorden || '').trim();
 
     if (idOrdenActual) {
@@ -2742,54 +3632,176 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
       {}
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, justifyContent: 'space-between', alignItems: 'stretch', gap: 2, mt: 0.5 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, flex: 1, minWidth: { xs: '100%', lg: 'auto' } }}>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { xs: 'stretch', sm: 'center' } }}>
-            <TextField label="Usuario crea OT" size="small" value={valores.UsuarioCrea || 'ADMINISTRADOR'} slotProps={{ input: { readOnly: true } }} sx={{ width: { xs: '100%', sm: '160px' } }} />
-            <Box sx={{ border: '1px solid #0066cc', borderRadius: '4px', p: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, backgroundColor: '#f0f7ff' }}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#0066cc', whiteSpace: 'nowrap' }}>Abonado OT:</Typography>
-              <input
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              alignItems: { xs: 'stretch', md: 'center' },
+              gap: 1,
+              width: '100%',
+              flexWrap: 'wrap'
+            }}
+          >
+            <TextField
+              label="Usuario crea OT"
+              size="small"
+              value={valores.UsuarioCrea || 'ADMINISTRADOR'}
+              slotProps={{ input: { readOnly: true } }}
+              sx={{
+                width: { xs: '100%', sm: '220px' },
+                flexShrink: 0,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: '#ffffff'
+                },
+                '& .MuiInputBase-input': {
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#263238'
+                },
+                '& .MuiInputLabel-root': {
+                  fontSize: '12px'
+                }
+              }}
+            />
+
+            <Box
+              sx={{
+                border: '1px solid #0066cc',
+                borderRadius: '6px',
+                px: 0.75,
+                py: 0.45,
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 0.6,
+                backgroundColor: '#f0f7ff',
+                width: { xs: '100%', md: 'auto' },
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 800,
+                  color: '#0066cc',
+                  whiteSpace: 'nowrap',
+                  mr: 0.2
+                }}
+              >
+                Abonado OT:
+              </Typography>
+
+              <Box
+                component="input"
                 type="text"
                 value={valores.AbonadoOT || '0'}
-                onKeyDown={validarSoloNumerosKeyDown}
-                onChange={(e) => handleChange('AbonadoOT', e.target.value.replace(/[^0-9]/g, ''))}
-                style={{ width: '60px', border: '1px solid #ccc', borderRadius: '4px', textAlign: 'center', padding: '2px' }}
+                readOnly
+                title="El abono se modifica mediante los botones de abono."
+                sx={{
+                  width: '82px',
+                  height: '28px',
+                  px: 0.75,
+                  boxSizing: 'border-box',
+                  border: '1px solid #b0bec5',
+                  borderRadius: '4px',
+                  textAlign: 'center',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#263238',
+                  backgroundColor: '#ffffff',
+                  outline: 'none'
+                }}
               />
+
               <Button
                 variant="contained"
                 color="success"
                 size="small"
+                disabled={guardandoAbono || !idRegistroBDActual}
                 onClick={abrirModalAbono}
                 sx={{
-                  textTransform: 'none',
-                  py: 0.1,
+                  minWidth: '72px',
+                  minHeight: '29px',
+                  py: 0.2,
                   px: 1,
-                  fontSize: '11px',
-                  whiteSpace: 'nowrap'
+                  textTransform: 'none',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  boxShadow: 'none'
                 }}
               >
                 Abonar $
               </Button>
 
               <Button
-                variant="outlined"
-                color="error"
+                variant="contained"
                 size="small"
-                disabled={abonadoActual <= 0}
-                onClick={solicitarLimpiarAbono}
+                disabled={
+                  guardandoAbono ||
+                  !abonoPendienteGuardar ||
+                  !idRegistroBDActual
+                }
+                onClick={() => setConfirmarGuardarAbono(true)}
+                title={
+                  abonoPendienteGuardar
+                    ? 'Guardar la actualización del Abonado OT en la base de datos'
+                    : 'Use Actualizar para modificar el total abonado'
+                }
                 sx={{
-                  textTransform: 'none',
-                  py: 0.1,
+                  minWidth: '72px',
+                  minHeight: '29px',
+                  py: 0.2,
                   px: 1,
-                  fontSize: '11px',
+                  textTransform: 'none',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
                   whiteSpace: 'nowrap',
-                  minWidth: 'auto'
+                  boxShadow: 'none',
+                  backgroundColor: '#1565c0',
+                  '&:hover': {
+                    backgroundColor: '#0d47a1'
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: '#cfd8dc',
+                    color: '#78909c'
+                  }
                 }}
               >
-                Limpiar
+                {guardandoAbono ? '...' : 'Guardar'}
+              </Button>
+
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={guardandoAbono || !idRegistroBDActual}
+                onClick={abrirActualizarAbono}
+                title="Corregir o reiniciar el total abonado"
+                sx={{
+                  minWidth: '72px',
+                  minHeight: '29px',
+                  py: 0.2,
+                  px: 1,
+                  textTransform: 'none',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  borderColor: '#1976d2',
+                  color: '#1565c0',
+                  backgroundColor: '#ffffff',
+                  '&:hover': {
+                    borderColor: '#1565c0',
+                    backgroundColor: '#f3f8fd'
+                  }
+                }}
+              >
+                Actualizar
               </Button>
             </Box>
           </Box>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1, width: '100%' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(5, minmax(0, 1fr))' }, gap: 1, width: '100%' }}>
             <Button
               variant="contained"
               size="small"
@@ -2806,7 +3818,22 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
               fullWidth
               startIcon={<DeleteIcon />}
               onClick={LimpiarFormulario}
-              sx={{ color: '#546e7a', borderColor: '#cfd8dc', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { backgroundColor: '#eceff1' } }}
+              title="Limpiar formulario"
+              sx={{
+                color: '#546e7a',
+                borderColor: '#cfd8dc',
+                textTransform: 'none',
+                fontWeight: 600,
+                borderRadius: '8px',
+                '&:hover': {
+                  backgroundColor: '#eceff1'
+                },
+                '&.Mui-disabled': {
+                  color: '#90a4ae',
+                  borderColor: '#cfd8dc',
+                  backgroundColor: '#f5f7f8'
+                }
+              }}
             >
               Limpiar
             </Button>
@@ -2816,7 +3843,25 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
               fullWidth
               startIcon={<SaveIcon />}
               onClick={handleIntentarGuardar}
-              sx={{ backgroundColor: '#2e7d32', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { backgroundColor: '#1b5e20' } }}
+              disabled={soloLecturaCartola}
+              title={
+                soloLecturaCartola
+                  ? 'O.T. cargada desde Cartola. El guardado está deshabilitado.'
+                  : 'Guardar Orden de Trabajo'
+              }
+              sx={{
+                backgroundColor: '#2e7d32',
+                textTransform: 'none',
+                fontWeight: 600,
+                borderRadius: '8px',
+                '&:hover': {
+                  backgroundColor: '#1b5e20'
+                },
+                '&.Mui-disabled': {
+                  backgroundColor: '#cfd8dc',
+                  color: '#78909c'
+                }
+              }}
             >
               Grabar
             </Button>
@@ -2835,20 +3880,182 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
               fullWidth
               startIcon={<PrintIcon />}
               onClick={handleImprimir}
-              sx={{ color: '#37474f', borderColor: '#b0bec5', textTransform: 'none', fontWeight: 600, borderRadius: '8px', gridColumn: { xs: 'span 2', sm: 'span 1' }, '@media print': { display: 'none' } }}
+              sx={{ color: '#37474f', borderColor: '#b0bec5', textTransform: 'none', fontWeight: 600, borderRadius: '8px', '@media print': { display: 'none' } }}
             >
               Imprimir
             </Button>
           </Box>
         </Box>
 
-        <Box sx={{ border: '1px solid #ccc', borderRadius: '6px', p: 1.5, backgroundColor: '#f8fafc', display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 1.5, flex: 1, width: '100%' }}>
-          <TextField label="Sub Total $" type="text" size="small" fullWidth value={valores.SubTotal || '0'} slotProps={{ input: { readOnly: true } }} />
-          <TextField label="Total Neto $" type="text" size="small" fullWidth value={valores.TotalNeto || '0'} slotProps={{ input: { readOnly: true } }} />
-          <TextField label="Descuento (%)" type="text" size="small" fullWidth value={valores.DescuentoPorc || '0'} onKeyDown={validarSoloNumerosKeyDown} onChange={(e) => handleChange('DescuentoPorc', e.target.value)} />
-          <TextField label="Total IVA $" type="text" size="small" fullWidth value={valores.TotalIVA || '0'} slotProps={{ input: { readOnly: true } }} />
-          <TextField label="Descuento $" type="text" size="small" fullWidth value={valores.DescuentoS || '0'} slotProps={{ input: { readOnly: true } }} />
-          <TextField label="Total OT $" type="text" size="small" fullWidth value={valores.TotalOT || '0'} slotProps={{ input: { readOnly: true } }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', backgroundColor: '#e2e8f0' } }} />
+        <Box
+          sx={{
+            border: '1px solid #d4e0e8',
+            borderRadius: '10px',
+            p: { xs: 1, sm: 1.35 },
+            backgroundColor: '#f8fafc',
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              md: 'repeat(3, minmax(0, 1fr))'
+            },
+            gap: 1,
+            flex: 1,
+            width: '100%',
+            minWidth: 0
+          }}
+        >
+          <TextField
+            label="Sub Total $"
+            type="text"
+            size="small"
+            fullWidth
+            value={formatearMontoCL(valores.SubTotal)}
+            slotProps={{ input: { readOnly: true } }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#f1f5f9',
+                '& fieldset': { borderColor: '#cbd5e1' }
+              },
+              '& .MuiInputBase-input': {
+                fontWeight: 700,
+                color: '#334155'
+              },
+              '& .MuiInputLabel-root': {
+                color: '#475569',
+                fontWeight: 600
+              }
+            }}
+          />
+
+          <TextField
+            label="Total Neto $"
+            type="text"
+            size="small"
+            fullWidth
+            value={formatearMontoCL(valores.TotalNeto)}
+            slotProps={{ input: { readOnly: true } }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#eef6ff',
+                '& fieldset': { borderColor: '#93c5fd' }
+              },
+              '& .MuiInputBase-input': {
+                fontWeight: 700,
+                color: '#0f5ca8'
+              },
+              '& .MuiInputLabel-root': {
+                color: '#1565c0',
+                fontWeight: 600
+              }
+            }}
+          />
+
+          <TextField
+            label="Descuento (%)"
+            type="text"
+            size="small"
+            fullWidth
+            value={valores.DescuentoPorc || '0'}
+            onKeyDown={validarSoloNumerosKeyDown}
+            onChange={(e) => handleChange('DescuentoPorc', e.target.value)}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#fff9e6',
+                '& fieldset': { borderColor: '#f0cf6a' },
+                '&:hover fieldset': { borderColor: '#d6a91f' },
+                '&.Mui-focused fieldset': { borderColor: '#c58b00' }
+              },
+              '& .MuiInputBase-input': {
+                fontWeight: 700,
+                color: '#7a5600'
+              },
+              '& .MuiInputLabel-root': {
+                color: '#8a6200',
+                fontWeight: 600
+              }
+            }}
+          />
+
+          <TextField
+            label="Total IVA $"
+            type="text"
+            size="small"
+            fullWidth
+            value={formatearMontoCL(valores.TotalIVA)}
+            slotProps={{ input: { readOnly: true } }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#f5f1ff',
+                '& fieldset': { borderColor: '#c4b5fd' }
+              },
+              '& .MuiInputBase-input': {
+                fontWeight: 700,
+                color: '#6d3fc0'
+              },
+              '& .MuiInputLabel-root': {
+                color: '#6d4cc2',
+                fontWeight: 600
+              }
+            }}
+          />
+
+          <TextField
+            label="Descuento $"
+            type="text"
+            size="small"
+            fullWidth
+            value={formatearMontoCL(valores.DescuentoS)}
+            slotProps={{ input: { readOnly: true } }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#fff3e8',
+                '& fieldset': { borderColor: '#fdba74' }
+              },
+              '& .MuiInputBase-input': {
+                fontWeight: 700,
+                color: '#b45309'
+              },
+              '& .MuiInputLabel-root': {
+                color: '#b45f06',
+                fontWeight: 600
+              }
+            }}
+          />
+
+          <TextField
+            label="Total OT $"
+            type="text"
+            size="small"
+            fullWidth
+            // IMPORTANTE:
+            // valores.TotalOT conserva el total original de la O.T.
+            // Aquí mostramos solamente lo que falta pagar después de los abonos.
+            // Así evitamos modificar el total base y realizar una doble resta.
+            value={formatearMontoCL(saldoPendienteAbono)}
+            slotProps={{
+              input: {
+                readOnly: true
+              }
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#eaf7ed',
+                '& fieldset': {
+                  borderColor: '#73b985',
+                  borderWidth: '1.5px'
+                }
+              },
+              '& .MuiInputBase-input': {
+                fontWeight: 900,
+                color: '#17652c'
+              },
+              '& .MuiInputLabel-root': {
+                color: '#23753a',
+                fontWeight: 700
+              }
+            }}
+          />
         </Box>
       </Box>
 
@@ -2859,110 +4066,6 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
       </Box>
 
       {}
-      <Dialog
-        open={confirmarLimpiarAbono}
-        onClose={() => setConfirmarLimpiarAbono(false)}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }
-        }}
-      >
-        <DialogTitle
-          sx={{
-            backgroundColor: '#d32f2f',
-            color: '#ffffff',
-            fontSize: '15px',
-            fontWeight: 700,
-            py: 1.25,
-            px: 2
-          }}
-        >
-          Reiniciar abono
-        </DialogTitle>
-
-        <DialogContent
-          sx={{
-            pt: '30px !important',
-            pb: 2,
-            px: 3,
-            textAlign: 'center'
-          }}
-        >
-          <Typography
-            sx={{
-              fontSize: '13px',
-              color: '#222222',
-              fontWeight: 600,
-              lineHeight: 1.6,
-              textAlign: 'center'
-            }}
-          >
-            ¿Está seguro de volver el Abonado OT a $0?
-          </Typography>
-
-          <Typography
-            sx={{
-              mt: 1.25,
-              fontSize: '11px',
-              color: '#607d8b',
-              textAlign: 'center'
-            }}
-          >
-            El abono actual es ${abonadoActual.toLocaleString('es-CL')}.
-            Después podrá ingresar un nuevo monto o porcentaje.
-          </Typography>
-        </DialogContent>
-
-        <DialogActions
-          sx={{
-            px: 3,
-            pb: 2,
-            pt: 0.75,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 1.5
-          }}
-        >
-          <Button
-            variant="contained"
-            color="error"
-            size="small"
-            onClick={confirmarLimpiezaAbono}
-            sx={{
-              minWidth: 100,
-              textTransform: 'none',
-              fontWeight: 700
-            }}
-          >
-            Confirmar
-          </Button>
-
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => setConfirmarLimpiarAbono(false)}
-            sx={{
-              minWidth: 100,
-              textTransform: 'none',
-              fontWeight: 700,
-              borderColor: '#9e9e9e',
-              color: '#333333',
-              '&:hover': {
-                borderColor: '#757575',
-                backgroundColor: '#f5f5f5'
-              }
-            }}
-          >
-            Cancelar
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       <Dialog
         open={modalAbono}
         onClose={cerrarModalAbono}
@@ -3472,14 +4575,28 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
             variant="contained"
             size="small"
             color="success"
+            disabled={guardandoAbono}
             onClick={confirmarAbonoOT}
             sx={{
-              minWidth: 100,
+              minWidth: 110,
               textTransform: 'none',
               fontWeight: 700
             }}
           >
-            Confirmar
+            {guardandoAbono ? (
+              <>
+                <CircularProgress
+                  size={14}
+                  sx={{
+                    mr: 0.75,
+                    color: '#ffffff'
+                  }}
+                />
+                Guardando
+              </>
+            ) : (
+              'Confirmar'
+            )}
           </Button>
 
           <Button
@@ -3496,6 +4613,545 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
                 borderColor: '#757575',
                 backgroundColor: '#f5f5f5'
               }
+            }}
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={modalActualizarAbono}
+        onClose={cerrarActualizarAbono}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '14px',
+            overflow: 'hidden',
+            boxShadow: '0 18px 48px rgba(15, 54, 88, 0.24)'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            background: 'linear-gradient(135deg, #0d5fa6 0%, #1976d2 100%)',
+            color: '#ffffff',
+            py: 1.45,
+            px: 2.25
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: '15px',
+              fontWeight: 800,
+              lineHeight: 1.2
+            }}
+          >
+            Actualizar abono de la O.T.
+          </Typography>
+          <Typography
+            sx={{
+              mt: 0.35,
+              fontSize: '10.5px',
+              color: 'rgba(255,255,255,0.82)',
+              fontWeight: 500
+            }}
+          >
+            Corrija el total abonado sin modificar los demás datos de la orden.
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            pt: '24px !important',
+            pb: 1.5,
+            px: { xs: 2, sm: 2.5 },
+            backgroundColor: '#fbfdff'
+          }}
+        >
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 1.1,
+              mb: 2
+            }}
+          >
+            <Box
+              sx={{
+                border: '1px solid #c8e6c9',
+                borderRadius: '10px',
+                p: 1.15,
+                textAlign: 'center',
+                backgroundColor: '#f5fbf6'
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: '10px',
+                  color: '#4f6f55',
+                  fontWeight: 700
+                }}
+              >
+                Abonado actual
+              </Typography>
+
+              <Typography
+                sx={{
+                  mt: 0.35,
+                  fontSize: '16px',
+                  fontWeight: 900,
+                  color: '#1b7a32',
+                  fontVariantNumeric: 'tabular-nums'
+                }}
+              >
+                ${abonadoActual.toLocaleString('es-CL')}
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                border: '1px solid #bbdefb',
+                borderRadius: '10px',
+                p: 1.15,
+                textAlign: 'center',
+                backgroundColor: '#f3f8fd'
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: '10px',
+                  color: '#4f6b83',
+                  fontWeight: 700
+                }}
+              >
+                Total O.T.
+              </Typography>
+
+              <Typography
+                sx={{
+                  mt: 0.35,
+                  fontSize: '16px',
+                  fontWeight: 900,
+                  color: '#0d4f88',
+                  fontVariantNumeric: 'tabular-nums'
+                }}
+              >
+                ${totalOrdenAbono.toLocaleString('es-CL')}
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box
+            sx={{
+              border: '1px solid #d9e5ef',
+              borderRadius: '10px',
+              p: 1.4,
+              backgroundColor: '#ffffff'
+            }}
+          >
+            <Typography
+              sx={{
+                mb: 0.8,
+                fontSize: '11px',
+                fontWeight: 800,
+                color: '#314b62'
+              }}
+            >
+              Nuevo total abonado
+            </Typography>
+
+            <TextField
+              fullWidth
+              size="small"
+              autoFocus
+              value={montoActualizarAbono}
+              onChange={(e) => {
+                setMontoActualizarAbono(
+                  e.target.value.replace(
+                    /[^0-9]/g,
+                    ''
+                  )
+                );
+                setErrorActualizarAbono('');
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Typography sx={{ fontWeight: 800, color: '#46657f' }}>$</Typography>
+                  </InputAdornment>
+                )
+              }}
+              inputProps={{
+                inputMode: 'numeric',
+                style: {
+                  textAlign: 'right',
+                  fontWeight: 800,
+                  fontSize: '14px'
+                }
+              }}
+              placeholder="Ingrese el total correcto"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '8px',
+                  backgroundColor: '#ffffff'
+                }
+              }}
+            />
+
+            {errorActualizarAbono && (
+              <Typography
+                sx={{
+                  mt: 0.9,
+                  color: '#c62828',
+                  fontSize: '10.5px',
+                  fontWeight: 700
+                }}
+              >
+                {errorActualizarAbono}
+              </Typography>
+            )}
+
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              fullWidth
+              disabled={guardandoAbono}
+              onClick={dejarAbonoEnCero}
+              sx={{
+                mt: 1.2,
+                minHeight: '34px',
+                textTransform: 'none',
+                fontSize: '10.5px',
+                fontWeight: 800,
+                borderRadius: '8px',
+                borderColor: '#ef9a9a',
+                backgroundColor: '#fffafa',
+                '&:hover': {
+                  borderColor: '#d32f2f',
+                  backgroundColor: '#fff1f1'
+                }
+              }}
+            >
+              Dejar abonado en $0
+            </Button>
+          </Box>
+
+          <Box
+            sx={{
+              mt: 1.25,
+              px: 1.25,
+              py: 1,
+              borderRadius: '8px',
+              backgroundColor: '#eef6fd',
+              border: '1px solid #d0e4f5'
+            }}
+          >
+            <Typography
+              sx={{
+                color: '#46657f',
+                fontSize: '10px',
+                lineHeight: 1.5,
+                textAlign: 'center'
+              }}
+            >
+              <strong>Aplicar</strong> cambia el valor en pantalla. Después debe presionar
+              <strong> Guardar</strong> para registrarlo definitivamente en la base de datos.
+            </Typography>
+          </Box>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 2.5,
+            pb: 2,
+            pt: 1,
+            justifyContent: 'center',
+            gap: 1,
+            backgroundColor: '#fbfdff'
+          }}
+        >
+          <Button
+            variant="contained"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={confirmarActualizarAbono}
+            sx={{
+              minWidth: 115,
+              minHeight: '34px',
+              borderRadius: '8px',
+              backgroundColor: '#1565c0',
+              textTransform: 'none',
+              fontWeight: 800,
+              boxShadow: 'none',
+              '&:hover': {
+                backgroundColor: '#0d47a1',
+                boxShadow: '0 4px 10px rgba(21, 101, 192, 0.2)'
+              }
+            }}
+          >
+            Aplicar
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={cerrarActualizarAbono}
+            sx={{
+              minWidth: 115,
+              minHeight: '34px',
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 700,
+              borderColor: '#aab7c2',
+              color: '#455a64',
+              backgroundColor: '#ffffff',
+              '&:hover': {
+                borderColor: '#78909c',
+                backgroundColor: '#f7f9fa'
+              }
+            }}
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* =========================================================
+          CONFIRMAR ELIMINACIÓN DEL ABONO / DEJAR EN $0
+          ========================================================= */}
+      <Dialog
+        open={confirmarEliminarAbono}
+        onClose={cancelarEliminarAbonoEnCero}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            background: 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)',
+            color: '#ffffff',
+            fontSize: '14px',
+            fontWeight: 800,
+            py: 1.3,
+            px: 2
+          }}
+        >
+          Confirmar abono en $0
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            pt: '28px !important',
+            pb: 1.5,
+            px: 3,
+            textAlign: 'center'
+          }}
+        >
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: '10px',
+              border: '1px solid #ffcdd2',
+              backgroundColor: '#fff6f6'
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '12.5px',
+                color: '#4e2a2a',
+                fontWeight: 700,
+                lineHeight: 1.55,
+                textAlign: 'center'
+              }}
+            >
+              ¿Está seguro de que desea dejar el total abonado de esta O.T. en $0?
+            </Typography>
+
+            <Typography
+              sx={{
+                mt: 1,
+                fontSize: '13px',
+                color: '#b71c1c',
+                textAlign: 'center',
+                fontWeight: 800
+              }}
+            >
+              Abonado actual: ${Number(abonadoActual || 0).toLocaleString('es-CL')}
+            </Typography>
+          </Box>
+
+          <Typography
+            sx={{
+              mt: 1.1,
+              fontSize: '10px',
+              color: '#78909c',
+              lineHeight: 1.5,
+              textAlign: 'center'
+            }}
+          >
+            Este paso todavía no modifica la base de datos. Después deberá usar el botón Guardar.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 2,
+            pt: 0.75,
+            justifyContent: 'center',
+            gap: 1.5
+          }}
+        >
+          {/* CONFIRMAR A LA IZQUIERDA */}
+          <Button
+            variant="contained"
+            color="error"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={confirmarEliminarAbonoEnCero}
+            sx={{
+              minWidth: 105,
+              textTransform: 'none',
+              fontWeight: 700
+            }}
+          >
+            Confirmar
+          </Button>
+
+          {/* CANCELAR A LA DERECHA */}
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={cancelarEliminarAbonoEnCero}
+            sx={{
+              minWidth: 105,
+              textTransform: 'none',
+              fontWeight: 700,
+              borderColor: '#9e9e9e',
+              color: '#333333',
+              '&:hover': {
+                borderColor: '#757575',
+                backgroundColor: '#f5f5f5'
+              }
+            }}
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={confirmarLimpiarAbono}
+        onClose={() => {
+          if (!guardandoAbono) {
+            setConfirmarLimpiarAbono(false);
+          }
+        }}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            backgroundColor: '#d32f2f',
+            color: '#ffffff',
+            fontSize: '15px',
+            fontWeight: 700,
+            py: 1.25,
+            px: 2
+          }}
+        >
+          Limpiar abono
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            pt: '30px !important',
+            pb: 2,
+            px: 3,
+            textAlign: 'center'
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: '13px',
+              color: '#222222',
+              fontWeight: 600,
+              lineHeight: 1.6,
+              textAlign: 'center'
+            }}
+          >
+            ¿Está seguro de reiniciar el Abonado OT a $0?
+          </Typography>
+
+          <Typography
+            sx={{
+              mt: 1.25,
+              fontSize: '11px',
+              color: '#607d8b',
+              textAlign: 'center'
+            }}
+          >
+            Actualmente hay ${abonadoActual.toLocaleString('es-CL')} abonados.
+            Después podrá ingresar nuevamente el monto o porcentaje correcto.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 2,
+            pt: 0.75,
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 1.5
+          }}
+        >
+          <Button
+            variant="contained"
+            color="error"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={confirmarLimpiezaAbono}
+            sx={{
+              minWidth: 105,
+              textTransform: 'none',
+              fontWeight: 700
+            }}
+          >
+            {guardandoAbono
+              ? 'Guardando...'
+              : 'Confirmar'}
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={() =>
+              setConfirmarLimpiarAbono(false)
+            }
+            sx={{
+              minWidth: 105,
+              textTransform: 'none',
+              fontWeight: 700,
+              borderColor: '#9e9e9e',
+              color: '#333333'
             }}
           >
             Cancelar
@@ -3613,6 +5269,229 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
         </DialogActions>
       </Dialog>
 
+      {/* =========================================================
+          CONFIRMACIÓN ANTES DE GUARDAR EL ABONO
+          ========================================================= */}
+      <Dialog
+        open={confirmarGuardarAbono}
+        onClose={() => {
+          if (!guardandoAbono) {
+            setConfirmarGuardarAbono(false);
+          }
+        }}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '7px',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            backgroundColor: '#1976d2',
+            color: '#ffffff',
+            fontSize: '14px',
+            fontWeight: 700,
+            py: 1,
+            px: 2
+          }}
+        >
+          Confirmar actualización
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            pt: '28px !important',
+            pb: 1.5,
+            px: 3,
+            textAlign: 'center'
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: '13px',
+              color: '#222222',
+              fontWeight: 600,
+              textAlign: 'center',
+              lineHeight: 1.6
+            }}
+          >
+            ¿Está seguro que desea guardar esta actualización del abono en la base de datos?
+          </Typography>
+
+          <Typography
+            sx={{
+              mt: 1.25,
+              fontSize: '14px',
+              color: '#1565c0',
+              fontWeight: 800,
+              textAlign: 'center'
+            }}
+          >
+            Nuevo total abonado: $
+            {Number(
+              valorAbonoPendiente !== null
+                ? valorAbonoPendiente
+                : (valores.AbonadoOT || 0)
+            ).toLocaleString('es-CL')}
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 2,
+            pt: 0.75,
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 1.5
+          }}
+        >
+          {/* SÍ A LA IZQUIERDA */}
+          <Button
+            variant="contained"
+            color="success"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={async () => {
+              setConfirmarGuardarAbono(false);
+              await guardarAbonoActualEnBD();
+            }}
+            sx={{
+              minWidth: 90,
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '11px'
+            }}
+          >
+            {guardandoAbono ? 'Guardando...' : 'Sí'}
+          </Button>
+
+          {/* NO A LA DERECHA */}
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={guardandoAbono}
+            onClick={() => setConfirmarGuardarAbono(false)}
+            sx={{
+              minWidth: 90,
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '11px',
+              borderColor: '#9e9e9e',
+              color: '#333333',
+              '&:hover': {
+                borderColor: '#757575',
+                backgroundColor: '#f5f5f5'
+              }
+            }}
+          >
+            No
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* =========================================================
+          ALERTA DE ÉXITO - ABONO GUARDADO
+          ========================================================= */}
+      <Dialog
+        open={alertaAbonoGuardado.abierto}
+        onClose={() =>
+          setAlertaAbonoGuardado({
+            abierto: false,
+            total: 0
+          })
+        }
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '7px',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            backgroundColor: '#2e7d32',
+            color: '#ffffff',
+            fontSize: '14px',
+            fontWeight: 700,
+            py: 1,
+            px: 2
+          }}
+        >
+          Abono guardado
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            pt: '26px !important',
+            pb: 1.5,
+            px: 3,
+            textAlign: 'center'
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: '13px',
+              color: '#222222',
+              fontWeight: 600,
+              textAlign: 'center',
+              lineHeight: 1.6
+            }}
+          >
+            El abono se ha guardado correctamente.
+          </Typography>
+
+          <Typography
+            sx={{
+              mt: 1.25,
+              fontSize: '14px',
+              color: '#1b5e20',
+              fontWeight: 800,
+              textAlign: 'center'
+            }}
+          >
+            Total abonado: $
+            {Number(
+              alertaAbonoGuardado.total || 0
+            ).toLocaleString('es-CL')}
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 2,
+            pb: 1.5,
+            pt: 0.5,
+            justifyContent: 'flex-end'
+          }}
+        >
+          <Button
+            variant="contained"
+            color="success"
+            size="small"
+            onClick={() =>
+              setAlertaAbonoGuardado({
+                abierto: false,
+                total: 0
+              })
+            }
+            sx={{
+              minWidth: 82,
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '11px'
+            }}
+          >
+            Aceptar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog
         open={modalBuscar.abierto}
         onClose={() => { setModalBuscar({ abierto: false, tipo: '', titulo: '' }); setFiltroTexto(''); setDatosBusqueda([]); }}
@@ -3701,9 +5580,11 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
               size="small"
               autoFocus={modalBuscar.tipo === 'cliente'}
               placeholder={
-                (modalBuscar.tipo === 'producto' || modalBuscar.tipo === 'productosBD')
-                  ? "Escriba para filtrar por código o descripción exactos..."
-                  : "Buscar por nombre, razón social o RUT..."
+                modalBuscar.tipo === 'productosBD'
+                  ? "Buscar por RUT, cliente, descripción o N° O.T..."
+                  : modalBuscar.tipo === 'producto'
+                    ? "Escriba para filtrar por código o descripción exactos..."
+                    : "Buscar por nombre, razón social o RUT..."
               }
               value={filtroTexto}
               onChange={(e) => setFiltroTexto(e.target.value)}
@@ -3791,7 +5672,9 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
                 <TableHead sx={{ backgroundColor: '#f0f4f8' }}>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', color: '#003366', width: '50px' }}>Nro</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', color: '#003366', width: '120px' }}>Código</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#003366', width: '130px' }}>
+                      {modalBuscar.tipo === 'productosBD' ? 'RUT' : 'Código'}
+                    </TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: '#003366' }}>Descripción</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 'bold', color: '#003366', width: '80px' }}>Stock</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold', color: '#003366', width: '100px' }}>Neto</TableCell>
@@ -3810,7 +5693,9 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
                       <TableRow key={item.id || item.Id || idx} hover sx={{ '&:nth-of-type(even)': { backgroundColor: '#fcfcfc' } }}>
                         <TableCell sx={{ color: '#666', fontSize: '12px' }}>{idx + 1}</TableCell>
                         <TableCell sx={{ color: '#0056b3', fontWeight: 600, fontFamily: 'monospace', fontSize: '12px' }}>
-                          {item.codigo || item.Codigo || '--'}
+                          {modalBuscar.tipo === 'productosBD'
+                            ? (item.rut || item.RUT || item.Rut || '--')
+                            : (item.codigo || item.Codigo || '--')}
                         </TableCell>
                         <TableCell sx={{ fontSize: '13px', fontWeight: 500 }}>{descText}</TableCell>
                         <TableCell align="center">
@@ -3859,26 +5744,23 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
                 </Typography>
               )}
             </TableContainer>
-          ) : (
-            <List
-              disablePadding
-              sx={{
-                maxHeight: { xs: '52vh', sm: '390px' },
-                overflowY: 'auto',
-                pr: { xs: 0, sm: 0.5 },
-                scrollbarWidth: 'thin',
-                scrollbarColor: '#9bb7cf transparent',
-                '&::-webkit-scrollbar': {
-                  width: 7
-                },
-                '&::-webkit-scrollbar-thumb': {
-                  backgroundColor: '#9bb7cf',
-                  borderRadius: 8
-                }
-              }}
-            >
-              {datosVisibles.map((item, idx) => {
-                const primario = item.nombre || item.Nombre || item.Descripcion || item.Codigo || 'Sin Nombre';
+          ) : 
+          (
+           
+             <TableContainer component={Paper} elevation={1} sx={{ overflowX: 'auto', width: '100%', borderRadius: '8px' }}>
+              <Table size="small" sx={{ minWidth: 600 }}>
+                <TableHead sx={{ backgroundColor: '#f0f4f8' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#003366', width: '50px' }}>Nro</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#003366', width: '120px' }}>Rut</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#003366' }}>Razon Social</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 'bold', color: '#003366', width: '100px' }}>Seleccionar</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {datosVisibles.map((item, idx) => {
+             
+                      const primario = item.nombre || item.Nombre || item.Descripcion || item.Codigo || 'Sin Nombre';
                 const codigoCliente = item.codigo || item.Codigo || '';
                 const secundario = codigoCliente
                   ? `Código/RUT: ${codigoCliente}`
@@ -3889,154 +5771,46 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
                   .charAt(0)
                   .toUpperCase();
 
-                return (
-                  <Box
-                    key={item.id || item.Id || idx}
-                    sx={{
-                      mb: 0.75,
-                      '&:last-of-type': {
-                        mb: 0
-                      }
-                    }}
-                  >
-                    <ListItem disablePadding>
-                      <ListItemButton
-                        onClick={() => handleSeleccionarElemento(item)}
-                        sx={{
-                          px: { xs: 1.25, sm: 1.5 },
-                          py: { xs: 1, sm: 1.15 },
-                          border: '1px solid #dbe5ee',
-                          borderRadius: '10px',
-                          backgroundColor: '#ffffff',
-                          transition: 'all 0.18s ease',
-                          alignItems: 'center',
-                          '&:hover': {
-                            backgroundColor: '#edf6fd',
-                            borderColor: '#7eb1d8',
-                            transform: { xs: 'none', sm: 'translateX(2px)' },
-                            boxShadow: '0 3px 10px rgba(0, 74, 135, 0.08)'
-                          }
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: { xs: 34, sm: 38 },
-                            height: { xs: 34, sm: 38 },
-                            minWidth: { xs: 34, sm: 38 },
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            mr: 1.25,
-                            backgroundColor: '#e6f1fa',
-                            color: '#005b9f',
-                            fontSize: { xs: '13px', sm: '14px' },
-                            fontWeight: 800,
-                            border: '1px solid #c6ddec'
-                          }}
-                        >
-                          {inicial}
-                        </Box>
-
-                        <ListItemText
-                          sx={{ my: 0, minWidth: 0 }}
-                          primary={
-                            <Typography
-                              sx={{
-                                fontWeight: 700,
-                                fontSize: { xs: '12.5px', sm: '13.5px' },
-                                color: '#1f2937',
-                                lineHeight: 1.3,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}
-                            >
-                              {primario}
-                            </Typography>
-                          }
-                          secondary={
-                            secundario ? (
-                              <Typography
-                                sx={{
-                                  mt: 0.3,
-                                  fontSize: { xs: '10.5px', sm: '11px' },
-                                  color: '#708090',
-                                  lineHeight: 1.2
-                                }}
-                              >
-                                {secundario}
-                              </Typography>
-                            ) : null
-                          }
-                        />
-
-                        <Box
-                          sx={{
-                            ml: 1,
-                            color: '#0066b3',
-                            fontWeight: 800,
-                            fontSize: '17px',
-                            lineHeight: 1
-                          }}
-                        >
-                          ›
-                        </Box>
-                      </ListItemButton>
-                    </ListItem>
-                  </Box>
-                );
-              })}
+                    return (
+                      <TableRow key={item.id || item.Id || idx} hover sx={{ '&:nth-of-type(even)': { backgroundColor: '#fcfcfc' } }}>
+                        <TableCell sx={{ color: '#666', fontSize: '12px' }}>{idx + 1}</TableCell>
+                        <TableCell sx={{ color: '#0056b3', fontWeight: 600, fontFamily: 'monospace', fontSize: '12px' }}>
+                          {item.rut || item.RUT || item.Rut || item.codigo || item.Codigo || '--'}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '13px', fontWeight: 500 }}>{primario}</TableCell>
+                        <TableCell align="center">
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disableElevation
+                            onClick={() => handleSeleccionarElemento(item)}
+                            sx={{
+                              minWidth: '32px',
+                              px: 1,
+                              py: 0.2,
+                              backgroundColor: '#003366',
+                              textTransform: 'none',
+                              fontSize: '11px',
+                              '&:hover': { backgroundColor: '#002244' }
+                            }}
+                          >
+                            Elegir
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
 
               {datosBusqueda.length === 0 && (
-                <Box
-                  sx={{
-                    minHeight: 220,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    px: 2,
-                    textAlign: 'center'
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      mb: 1.25,
-                      backgroundColor: '#e8f1f8'
-                    }}
-                  >
-                    <SearchIcon sx={{ color: '#5f8fb6', fontSize: 25 }} />
-                  </Box>
-
-                  <Typography
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      color: '#334155'
-                    }}
-                  >
-                    No se encontraron clientes
-                  </Typography>
-
-                  <Typography
-                    sx={{
-                      mt: 0.5,
-                      fontSize: '11px',
-                      color: '#7b8794',
-                      maxWidth: 300
-                    }}
-                  >
-                    Intenta buscar por nombre, razón social o RUT.
-                  </Typography>
-                </Box>
+                <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', py: 4 }}>
+                  No se encontraron registros.
+                </Typography>
               )}
-            </List>
+            </TableContainer>
+           
+             
           )}
         </DialogContent>
 

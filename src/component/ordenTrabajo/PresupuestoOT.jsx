@@ -5,7 +5,7 @@ import {
   Select, MenuItem, FormControl, InputAdornment, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress
 } from '@mui/material';
-import { Search, Save, Print, Add, Close } from '@mui/icons-material';
+import { Search, Add, Close } from '@mui/icons-material';
 
 const BASE_API_URL = process.env.REACT_APP_API_URL || 'http://localhost/apichess';
 const ORDEN_API_URL = 'http://localhost/Api';
@@ -219,10 +219,10 @@ export default function PresupuestoOT({ formOrden = {} }) {
       const totalNeto = tieneValor(subtotalGuardado)
         ? obtenerNumero(subtotalGuardado)
         : Math.round(
-            cantidad *
-              valorNeto *
-              (1 - dsctoPorc / 100)
-          );
+          cantidad *
+          valorNeto *
+          (1 - dsctoPorc / 100)
+        );
 
       return {
         id:
@@ -231,14 +231,14 @@ export default function PresupuestoOT({ formOrden = {} }) {
           `generar-${idOrdenActual}-${index}`,
         codigo: String(
           detalle.Codigo ??
-            detalle.codigo ??
-            '--'
+          detalle.codigo ??
+          '--'
         ),
         producto: String(
           detalle.Descripcion ??
-            detalle.descripcion ??
-            detalle.producto ??
-            ''
+          detalle.descripcion ??
+          detalle.producto ??
+          ''
         ),
         cantidad,
         valorNeto,
@@ -433,10 +433,10 @@ export default function PresupuestoOT({ formOrden = {} }) {
           const totalNeto = tieneValor(subtotalGuardado)
             ? obtenerNumero(subtotalGuardado)
             : Math.round(
-                cantidad *
-                  valorNeto *
-                  (1 - dsctoPorc / 100)
-              );
+              cantidad *
+              valorNeto *
+              (1 - dsctoPorc / 100)
+            );
 
           return {
             id:
@@ -445,21 +445,21 @@ export default function PresupuestoOT({ formOrden = {} }) {
               `${idOrdenActual}-${index}`,
             codigo: String(
               detalle.Codigo ??
-                detalle.codigo ??
-                detalle.CodigoProducto ??
-                detalle.codigoProducto ??
-                detalle.CodProducto ??
-                detalle.codProducto ??
-                '--'
+              detalle.codigo ??
+              detalle.CodigoProducto ??
+              detalle.codigoProducto ??
+              detalle.CodProducto ??
+              detalle.codProducto ??
+              '--'
             ),
             producto: String(
               detalle.Descripcion ??
-                detalle.descripcion ??
-                detalle.NombreProducto ??
-                detalle.nombreProducto ??
-                detalle.Nombre ??
-                detalle.nombre ??
-                ''
+              detalle.descripcion ??
+              detalle.NombreProducto ??
+              detalle.nombreProducto ??
+              detalle.Nombre ??
+              detalle.nombre ??
+              ''
             ),
             cantidad,
             valorNeto,
@@ -757,8 +757,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
       const detalleError = await response.text().catch(() => '');
 
       throw new Error(
-        `HTTP ${response.status}${
-          detalleError ? ` - ${detalleError}` : ''
+        `HTTP ${response.status}${detalleError ? ` - ${detalleError}` : ''
         }`
       );
     }
@@ -862,7 +861,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
           `ot_detalles_actualizados_${idOrdenActual}`,
           JSON.stringify(actualizacionOT)
         );
-      } catch (_) {}
+      } catch (_) { }
 
       window.dispatchEvent(
         new CustomEvent('ot:detalles-actualizados', {
@@ -878,8 +877,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
       );
 
       alert(
-        `No fue posible guardar los productos en la O.T.: ${
-          error.message || 'Error desconocido'
+        `No fue posible guardar los productos en la O.T.: ${error.message || 'Error desconocido'
         }`
       );
     } finally {
@@ -975,9 +973,9 @@ export default function PresupuestoOT({ formOrden = {} }) {
   };
 
   const panelOrigenSx = {
-    backgroundColor: '#e0e0e0',
-    border: '1px solid #b8b8b8',
-    borderRadius: '3px'
+    backgroundColor: '#eef2f6',
+    border: '1px solid #cbd5df',
+    borderRadius: '6px'
   };
 
   return (
@@ -991,9 +989,29 @@ export default function PresupuestoOT({ formOrden = {} }) {
         p: { xs: 1, sm: 1.25, md: 1.5 }
       }}
     >
-      <Box sx={{ ...panelOrigenSx, p: { xs: 1, md: 1.25 }, mb: 1.25 }}>
-        <Grid container spacing={1}>
-          <Grid item xs={12} sm={4} md={3}>
+      <Box
+        sx={{
+          mb: 1.4,
+          p: { xs: 1.1, sm: 1.35, md: 1.5 },
+          backgroundColor: '#f8fafc',
+          border: '1px solid #d6e0ea',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)'
+        }}
+      >
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              md: '110px minmax(190px, 1.45fr) 125px 100px 125px 100px 115px'
+            },
+            gap: 0.9,
+            alignItems: 'end'
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Número O.T.:
             </Typography>
@@ -1002,11 +1020,25 @@ export default function PresupuestoOT({ formOrden = {} }) {
               fullWidth
               value={datosPresupuesto.IdOrden}
               onChange={(e) => handleChange('IdOrden', e.target.value)}
-              sx={campoCompactoSx}
+              sx={{
+                ...campoCompactoSx,
+                '& .MuiOutlinedInput-root': {
+                  height: '32px',
+                  backgroundColor: '#ffffff',
+                  borderRadius: '5px'
+                },
+                '& .MuiInputBase-input': {
+                  px: 1,
+                  py: 0.5,
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textAlign: 'center'
+                }
+              }}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={8} md={6}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Cliente:
             </Typography>
@@ -1017,41 +1049,23 @@ export default function PresupuestoOT({ formOrden = {} }) {
               onChange={(e) => handleChange('NombreCliente', e.target.value)}
               sx={{
                 ...campoCompactoSx,
+                '& .MuiOutlinedInput-root': {
+                  height: '32px',
+                  backgroundColor: '#ffffff',
+                  borderRadius: '5px'
+                },
                 '& .MuiInputBase-input': {
                   px: 1,
                   py: 0.5,
                   fontSize: '11px',
-                  textAlign: 'left'
+                  fontWeight: 600,
+                  textAlign: 'center'
                 }
               }}
             />
-          </Grid>
+          </Box>
 
-          <Grid
-            item
-            xs={12}
-            md={3}
-            sx={{ display: 'flex', alignItems: 'flex-end' }}
-          >
-            <Button
-              variant="contained"
-              size="small"
-              fullWidth
-              sx={{
-                ...botonOrigenSx,
-                backgroundColor: '#0070d2',
-                color: '#ffffff',
-                borderColor: '#0063bb',
-                '&:hover': {
-                  backgroundColor: '#0063bb'
-                }
-              }}
-            >
-              Observaciones
-            </Button>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Fecha ingreso:
             </Typography>
@@ -1062,9 +1076,9 @@ export default function PresupuestoOT({ formOrden = {} }) {
               onChange={(e) => handleChange('FechaIngreso', e.target.value)}
               sx={campoCompactoSx}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Hora ingreso:
             </Typography>
@@ -1075,9 +1089,9 @@ export default function PresupuestoOT({ formOrden = {} }) {
               onChange={(e) => handleChange('HoraIngreso', e.target.value)}
               sx={campoCompactoSx}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Fecha entrega:
             </Typography>
@@ -1088,9 +1102,9 @@ export default function PresupuestoOT({ formOrden = {} }) {
               onChange={(e) => handleChange('FechaEntrega', e.target.value)}
               sx={campoCompactoSx}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Hora entrega:
             </Typography>
@@ -1101,9 +1115,9 @@ export default function PresupuestoOT({ formOrden = {} }) {
               onChange={(e) => handleChange('HoraEntrega', e.target.value)}
               sx={campoCompactoSx}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Bodega:
             </Typography>
@@ -1114,9 +1128,24 @@ export default function PresupuestoOT({ formOrden = {} }) {
               onChange={(e) => handleChange('Bodega', e.target.value)}
               sx={campoCompactoSx}
             />
-          </Grid>
+          </Box>
+        </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+        <Box
+          sx={{
+            mt: 1.15,
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: '180px minmax(0, 1fr)',
+              md: '180px minmax(420px, 650px)'
+            },
+            gap: 1,
+            alignItems: 'start',
+            justifyContent: 'start'
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="caption" sx={etiquetaAzulSx}>
               Encargado:
             </Typography>
@@ -1125,46 +1154,74 @@ export default function PresupuestoOT({ formOrden = {} }) {
               fullWidth
               value={datosPresupuesto.EncargadoOT}
               onChange={(e) => handleChange('EncargadoOT', e.target.value)}
-              sx={campoCompactoSx}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <Typography
-              variant="caption"
               sx={{
-                display: 'block',
-                mb: 0.35,
-                fontSize: '10px',
-                fontWeight: 700,
-                color: '#4a4a4a'
-              }}
-            >
-              Observaciones
-            </Typography>
-            <TextField
-              fullWidth
-              multiline
-              minRows={2}
-              maxRows={4}
-              value={datosPresupuesto.Observaciones}
-              onChange={(e) => handleChange('Observaciones', e.target.value)}
-              placeholder="Escribe observaciones o comentarios técnicos aquí..."
-              sx={{
+                ...campoCompactoSx,
                 '& .MuiOutlinedInput-root': {
+                  height: '32px',
                   backgroundColor: '#ffffff',
-                  borderRadius: '3px',
-                  minHeight: '64px',
-                  alignItems: 'flex-start'
+                  borderRadius: '5px'
                 },
-                '& textarea': {
+                '& .MuiInputBase-input': {
+                  px: 1,
+                  py: 0.5,
                   fontSize: '11px',
-                  lineHeight: 1.4
+                  fontWeight: 600,
+                  textAlign: 'center'
                 }
               }}
             />
-          </Grid>
-        </Grid>
+          </Box>
+
+          <Box
+            sx={{
+              minWidth: 0,
+              width: '100%',
+              maxWidth: { xs: '100%', md: '650px' }
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                ...etiquetaAzulSx,
+                minWidth: '96px',
+                mx: 0
+              }}
+            >
+              Observaciones:
+            </Typography>
+
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              maxRows={7}
+              value={datosPresupuesto.Observaciones}
+              onChange={(e) => handleChange('Observaciones', e.target.value)}
+              placeholder="Escribe aquí las observaciones, comentarios técnicos o indicaciones de la O.T..."
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: '#ffffff',
+                  borderRadius: '6px',
+                  minHeight: '82px',
+                  alignItems: 'flex-start',
+                  '&:hover fieldset': {
+                    borderColor: '#8fb9df'
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#1976d2'
+                  }
+                },
+                '& textarea': {
+                  px: 0.5,
+                  py: 0.35,
+                  fontSize: '11.5px',
+                  lineHeight: 1.5,
+                  textAlign: 'left'
+                }
+              }}
+            />
+          </Box>
+        </Box>
       </Box>
 
       <TableContainer
@@ -1547,28 +1604,6 @@ export default function PresupuestoOT({ formOrden = {} }) {
                 Limpiar
               </Button>
 
-              <Button
-                variant="contained"
-                size="small"
-                onClick={confirmarDetallePresupuesto}
-                disabled={
-                  guardandoDetallesBD ||
-                  detalleInsumos.length === 0
-                }
-                sx={{
-                  ...botonOrigenSx,
-                  minWidth: 90
-                }}
-              >
-                {guardandoDetallesBD ? (
-                  <>
-                    <CircularProgress size={14} sx={{ mr: 0.75 }} />
-                    Guardando
-                  </>
-                ) : (
-                  'Agregar Producto'
-                )}
-              </Button>
             </Box>
           </Box>
 
@@ -1753,6 +1788,59 @@ export default function PresupuestoOT({ formOrden = {} }) {
                 )}
               </TableBody>
             </Table>
+
+            {/* =====================================================
+                BOTÓN MOVIDO: AGREGAR PRODUCTO
+                Se mantiene la misma función y las mismas validaciones.
+                ===================================================== */}
+            <Box
+              sx={{
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 5,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                py: 1,
+                px: 1,
+                backgroundColor: '#a0a0a0',
+                borderTop: '1px solid #909090'
+              }}
+            >
+              <Button
+                variant="contained"
+                size="small"
+                onClick={confirmarDetallePresupuesto}
+                disabled={
+                  guardandoDetallesBD ||
+                  detalleInsumos.length === 0
+                }
+                sx={{
+                  ...botonOrigenSx,
+                  minWidth: 115,
+                  backgroundColor: '#e0e0e0',
+                  color: '#111111',
+                  border: '1px solid #888888',
+                  '&:hover': {
+                    backgroundColor: '#d5d5d5'
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: '#c7c7c7',
+                    color: '#777777',
+                    borderColor: '#a8a8a8'
+                  }
+                }}
+              >
+                {guardandoDetallesBD ? (
+                  <>
+                    <CircularProgress size={14} sx={{ mr: 0.75 }} />
+                    Guardando
+                  </>
+                ) : (
+                  'Agregar Producto'
+                )}
+              </Button>
+            </Box>
           </TableContainer>
         </Box>
       </Box>
@@ -1760,64 +1848,24 @@ export default function PresupuestoOT({ formOrden = {} }) {
       <Box
         sx={{
           ...panelOrigenSx,
-          p: 1,
+          p: 1.25,
           display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          justifyContent: 'space-between',
-          alignItems: { xs: 'stretch', md: 'center' },
-          gap: 1
+          justifyContent: 'center',
+          alignItems: 'center'
         }}
       >
         <Box
           sx={{
-            display: 'flex',
-            gap: 0.5,
-            flexWrap: 'wrap'
-          }}
-        >
-          <Button
-            startIcon={<Search />}
-            variant="contained"
-            size="small"
-            sx={botonOrigenSx}
-          >
-            Buscar
-          </Button>
-          <Button
-            startIcon={<Save />}
-            variant="contained"
-            size="small"
-            sx={botonOrigenSx}
-          >
-            Grabar
-          </Button>
-          <Button
-            disabled
-            variant="contained"
-            size="small"
-            sx={botonOrigenSx}
-          >
-            Eliminar
-          </Button>
-          <Button
-            startIcon={<Print />}
-            variant="contained"
-            size="small"
-            sx={botonOrigenSx}
-          >
-            Imprimir
-          </Button>
-        </Box>
-
-        <Box
-          sx={{
+            width: '100%',
+            maxWidth: 390,
             display: 'grid',
             gridTemplateColumns: {
               xs: 'repeat(3, minmax(80px, 1fr))',
-              sm: 'repeat(3, 105px)'
+              sm: 'repeat(3, 120px)'
             },
-            gap: 0.75,
-            justifyContent: { xs: 'stretch', md: 'end' }
+            gap: 1,
+            justifyContent: 'center',
+            alignItems: 'end'
           }}
         >
           {[
@@ -1825,12 +1873,17 @@ export default function PresupuestoOT({ formOrden = {} }) {
             ['Iva', 'Iva'],
             ['Total', 'Total']
           ].map(([label, campo]) => (
-            <Box key={campo}>
+            <Box
+              key={campo}
+              sx={{
+                minWidth: 0
+              }}
+            >
               <Typography
                 variant="caption"
                 sx={{
                   display: 'block',
-                  mb: 0.25,
+                  mb: 0.35,
                   fontSize: '9.5px',
                   fontWeight: 700,
                   textAlign: 'center'
@@ -1838,6 +1891,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
               >
                 {label}
               </Typography>
+
               <TextField
                 size="small"
                 fullWidth
@@ -1845,12 +1899,12 @@ export default function PresupuestoOT({ formOrden = {} }) {
                 onChange={(e) => handleChange(campo, e.target.value)}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    height: '28px',
+                    height: '30px',
                     backgroundColor: '#ffffff',
                     borderRadius: '3px'
                   },
                   '& .MuiInputBase-input': {
-                    p: '4px 6px',
+                    p: '4px 7px',
                     textAlign: 'right',
                     fontSize: '11px',
                     fontWeight: 700
