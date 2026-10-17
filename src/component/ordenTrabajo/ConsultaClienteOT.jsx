@@ -318,12 +318,12 @@ const normalizarOrden = (item, index) => {
 
   const estado = String(
     obtenerValor(item, [
+      'EstadoOTTexto',
+      'estadoOTTexto',
       'EstadoOT',
       'estadoOT',
       'Estado',
-      'estado',
-      'EstadoOTTexto',
-      'estadoOTTexto'
+      'estado'
     ], 'SIN ESTADO')
   ).trim();
 
@@ -1158,11 +1158,12 @@ export default function ConsultaClienteOT({
         const estado = String(
           obtener(
             [
+              'EstadoOTTexto',
+              'estadoOTTexto',
               'EstadoOT',
               'estadoOT',
               'Estado',
-              'estado',
-              'EstadoOTTexto'
+              'estado'
             ],
             orden?.estado || ''
           )
@@ -2151,7 +2152,7 @@ export default function ConsultaClienteOT({
                 size="small"
                 stickyHeader
                 sx={{
-                  minWidth: { xs: '880px', md: '100%' },
+                  minWidth: { xs: '950px', md: '100%' },
                   tableLayout: 'auto'
                 }}
               >
@@ -2172,6 +2173,10 @@ export default function ConsultaClienteOT({
                   >
                     <TableCell align="center" sx={{ width: '48px' }}>
                       N°
+                    </TableCell>
+
+                    <TableCell align="center" sx={{ width: '78px' }}>
+                      N° OT
                     </TableCell>
 
                     <TableCell sx={{ width: '120px' }}>
@@ -2207,7 +2212,7 @@ export default function ConsultaClienteOT({
                 <TableBody>
                   {cargando ? (
                     <TableRow>
-                      <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                      <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                         <CircularProgress size={28} />
                       </TableCell>
                     </TableRow>
@@ -2262,6 +2267,17 @@ export default function ConsultaClienteOT({
                             }}
                           >
                             {indiceGlobal}
+                          </TableCell>
+
+                          <TableCell
+                            align="center"
+                            sx={{
+                              fontWeight: 900,
+                              color: '#173b67',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {row.idOt || '--'}
                           </TableCell>
 
                           <TableCell
@@ -2384,7 +2400,7 @@ export default function ConsultaClienteOT({
                   ) : (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={9}
                         align="center"
                         sx={{
                           py: 6,
@@ -2683,7 +2699,10 @@ export default function ConsultaClienteOT({
               <Table
                 size="small"
                 stickyHeader
-                sx={{ minWidth: '900px' }}
+                sx={{
+                  minWidth: { xs: '860px', md: '100%' },
+                  tableLayout: 'fixed'
+                }}
               >
                 <TableHead>
                   <TableRow
@@ -2693,19 +2712,22 @@ export default function ConsultaClienteOT({
                         color: '#50677d',
                         fontWeight: 800,
                         fontSize: '10.5px',
-                        py: 1.1,
+                        py: 0.9,
+                        px: 1,
+                        whiteSpace: 'nowrap',
                         borderBottom: '1px solid #dce5ee'
                       }
                     }}
                   >
-                    <TableCell sx={{ width: '55px' }}>N°</TableCell>
-                    <TableCell sx={{ width: '125px' }}>RUT</TableCell>
-                    <TableCell>Cliente / Descripción</TableCell>
-                    <TableCell sx={{ width: '125px' }}>Fecha</TableCell>
-                    <TableCell sx={{ width: '140px' }}>Estado</TableCell>
-                    <TableCell align="right" sx={{ width: '110px' }}>Neto</TableCell>
-                    <TableCell align="right" sx={{ width: '110px' }}>Bruto</TableCell>
-                    <TableCell align="center" sx={{ width: '100px' }}>Acción</TableCell>
+                    <TableCell align="center" sx={{ width: '42px' }}>N°</TableCell>
+                    <TableCell align="center" sx={{ width: '62px' }}>N° OT</TableCell>
+                    <TableCell sx={{ width: '95px' }}>RUT</TableCell>
+                    <TableCell sx={{ width: '240px' }}>Cliente / Descripción</TableCell>
+                    <TableCell sx={{ width: '92px' }}>Fecha</TableCell>
+                    <TableCell sx={{ width: '88px' }}>Estado</TableCell>
+                    <TableCell align="right" sx={{ width: '88px' }}>Neto</TableCell>
+                    <TableCell align="right" sx={{ width: '95px' }}>Bruto</TableCell>
+                    <TableCell align="center" sx={{ width: '78px' }}>Acción</TableCell>
                   </TableRow>
                 </TableHead>
 
@@ -2717,7 +2739,10 @@ export default function ConsultaClienteOT({
                         hover
                         sx={{
                           '& td': {
-                            borderBottom: '1px solid #edf2f7'
+                            borderBottom: '1px solid #edf2f7',
+                            py: 0.75,
+                            px: 1,
+                            verticalAlign: 'middle'
                           },
                           '&:nth-of-type(even)': {
                             backgroundColor: '#fbfcfd'
@@ -2728,38 +2753,67 @@ export default function ConsultaClienteOT({
                         }}
                       >
                         <TableCell
+                          align="center"
                           sx={{
                             color: '#75889b',
-                            fontSize: '11.5px',
-                            fontWeight: 600
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap'
                           }}
                         >
                           {idx + 1}
                         </TableCell>
 
                         <TableCell
+                          align="center"
+                          sx={{
+                            color: '#173b67',
+                            fontWeight: 900,
+                            fontSize: '11.5px',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {orden.idOt || '--'}
+                        </TableCell>
+
+                        <TableCell
                           sx={{
                             color: '#0b5f8f',
                             fontWeight: 800,
-                            fontSize: '11.5px'
+                            fontSize: '11px',
+                            whiteSpace: 'nowrap'
                           }}
                         >
                           {orden.rut || '--'}
                         </TableCell>
 
                         <TableCell>
-                          <Typography
-                            sx={{
-                              fontSize: '11.5px',
-                              fontWeight: 600,
-                              color: '#30465b'
-                            }}
-                          >
-                            {orden.descripcion}
-                          </Typography>
+                          <Tooltip title={orden.descripcion || ''} placement="top" arrow>
+                            <Typography
+                              sx={{
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#30465b',
+                                lineHeight: 1.25,
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                wordBreak: 'break-word'
+                              }}
+                            >
+                              {orden.descripcion}
+                            </Typography>
+                          </Tooltip>
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: '11.5px', color: '#53687b' }}>
+                        <TableCell
+                          sx={{
+                            fontSize: '11px',
+                            color: '#53687b',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
                           {orden.fechaIngreso}
                         </TableCell>
 
@@ -2811,10 +2865,10 @@ export default function ConsultaClienteOT({
                               seleccionarOrdenDesdeModal(orden)
                             }
                             sx={{
-                              minWidth: '68px',
-                              minHeight: '28px',
-                              px: 1,
-                              py: 0.25,
+                              minWidth: '62px',
+                              minHeight: '27px',
+                              px: 0.9,
+                              py: 0.2,
                               borderRadius: '7px',
                               textTransform: 'none',
                               fontSize: '10.5px',
@@ -2833,7 +2887,7 @@ export default function ConsultaClienteOT({
                   ) : (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={9}
                         align="center"
                         sx={{
                           py: 5,
