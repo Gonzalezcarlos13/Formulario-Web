@@ -5408,6 +5408,7 @@ export default function GenerarOT({ valores = {}, handleChange = () => { }, limp
         ''
       ),
       FechaIngreso: String(valores.FechaIngreso || ''),
+      FechaEntrega: String(valores.FechaEntrega || ''),
       HoraIngreso: String(valores.HoraIngreso || ''),
       HoraEntrega: String(valores.HoraEntrega || ''),
       Bodega: String(valores.Bodega || ''),

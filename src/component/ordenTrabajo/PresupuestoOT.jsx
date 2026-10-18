@@ -11,27 +11,6 @@ const BASE_API_URL = process.env.REACT_APP_API_URL || 'http://localhost/apichess
 const ORDEN_API_URL = 'http://localhost/Api';
 
 const detallesPendientesPorOT = new Map();
-const DETALLES_ELIMINADOS_STORAGE_KEY = 'OT_DETALLES_ELIMINADOS_VISUAL_V1';
-
-const obtenerDetallesEliminadosVisualesOT = (idOrden) => {
-  const id = String(idOrden || '').trim();
-
-  if (!id) {
-    return new Set();
-  }
-
-  try {
-    const raw = localStorage.getItem(DETALLES_ELIMINADOS_STORAGE_KEY);
-    const data = raw ? JSON.parse(raw) : {};
-    const eliminados = Array.isArray(data?.[id]) ? data[id] : [];
-
-    return new Set(
-      eliminados.map((item) => String(item))
-    );
-  } catch (_) {
-    return new Set();
-  }
-};
 
 const leerPendientesOT = (idOrden) => {
   const id = String(idOrden || '').trim();
@@ -346,6 +325,7 @@ export default function PresupuestoOT({ formOrden = {} }) {
           headers: {
             Accept: 'application/json'
           },
+          cache: 'no-store',
           ...(signal ? { signal } : {})
         }
       );
@@ -478,16 +458,8 @@ export default function PresupuestoOT({ formOrden = {} }) {
           };
         });
 
-      const eliminadosVisuales = obtenerDetallesEliminadosVisualesOT(
-        idOrdenActual
-      );
-
-      const filasVisibles = filas.filter((fila) =>
-        !eliminadosVisuales.has(String(fila.id))
-      );
-
-      setFilasGrillaSuperior(filasVisibles);
-      return filasVisibles;
+      setFilasGrillaSuperior(filas);
+      return filas;
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error(
@@ -507,6 +479,15 @@ export default function PresupuestoOT({ formOrden = {} }) {
   useEffect(() => {
     if (!idOrdenActual) {
       setFilasGrillaSuperior([]);
+      return undefined;
+    }
+
+    const snapshot = obtenerSnapshotGenerarOT();
+
+    if (snapshot) {
+      setFilasGrillaSuperior(
+        convertirDetallesGenerarAFilas(snapshot.detalles)
+      );
       return undefined;
     }
 
@@ -1231,13 +1212,21 @@ export default function PresupuestoOT({ formOrden = {} }) {
           mb: 1.25,
           borderColor: '#b8b8b8',
           borderRadius: '3px',
-          minHeight: 190,
-          maxHeight: 245,
+          minHeight: 220,
+          maxHeight: { xs: 300, sm: 330, md: 360 },
           overflowX: 'auto',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          scrollbarGutter: 'stable'
         }}
       >
-        <Table size="small" stickyHeader>
+        <Table
+          size="small"
+          stickyHeader
+          sx={{
+            minWidth: 980,
+            tableLayout: 'auto'
+          }}
+        >
           <TableHead>
             <TableRow
               sx={{
@@ -1245,35 +1234,37 @@ export default function PresupuestoOT({ formOrden = {} }) {
                   backgroundColor: '#f0f0f0',
                   color: '#111111',
                   fontWeight: 700,
-                  p: '4px 6px',
-                  fontSize: '10px',
+                  px: 1.25,
+                  py: 1,
+                  fontSize: '11.5px',
+                  lineHeight: 1.3,
                   whiteSpace: 'nowrap',
                   borderBottom: '1px solid #b8b8b8'
                 }
               }}
             >
-              <TableCell />
-              <TableCell>Código</TableCell>
-              <TableCell>Producto</TableCell>
-              <TableCell align="center">Cantidad</TableCell>
-              <TableCell align="right">Valor Neto</TableCell>
-              <TableCell align="right">Dscto.($)</TableCell>
-              <TableCell align="right">Dscto.(%)</TableCell>
-              <TableCell align="right">Total Neto</TableCell>
-              <TableCell align="right">Comisión</TableCell>
+              <TableCell sx={{ width: 34 }} />
+              <TableCell sx={{ minWidth: 110 }}>Código</TableCell>
+              <TableCell sx={{ minWidth: 280 }}>Producto</TableCell>
+              <TableCell align="center" sx={{ minWidth: 90 }}>Cantidad</TableCell>
+              <TableCell align="right" sx={{ minWidth: 100 }}>Valor Neto</TableCell>
+              <TableCell align="right" sx={{ minWidth: 90 }}>Dscto.($)</TableCell>
+              <TableCell align="right" sx={{ minWidth: 90 }}>Dscto.(%)</TableCell>
+              <TableCell align="right" sx={{ minWidth: 110 }}>Total Neto</TableCell>
+              <TableCell align="right" sx={{ minWidth: 90 }}>Comisión</TableCell>
             </TableRow>
           </TableHead>
 
           <TableBody>
             {cargandoDetalleOT ? (
               <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 2, fontSize: '10px' }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 2.5, fontSize: '11.5px' }}>
                   Cargando productos de la O.T. {idOrdenActual}...
                 </TableCell>
               </TableRow>
             ) : filasGrillaSuperior.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 2, fontSize: '10px' }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 2.5, fontSize: '11.5px' }}>
                   Esta O.T. no tiene productos guardados.
                 </TableCell>
               </TableRow>
@@ -1284,27 +1275,32 @@ export default function PresupuestoOT({ formOrden = {} }) {
                   sx={{
                     backgroundColor: '#ffffff',
                     '& td': {
-                      p: '4px 6px',
-                      fontSize: '10px',
+                      px: 1.25,
+                      py: 0.9,
+                      fontSize: '11.5px',
+                      lineHeight: 1.35,
+                      verticalAlign: 'middle',
                       borderBottom: '1px solid #e0e0e0'
                     }
                   }}
                 >
-                  <TableCell sx={{ width: 24, textAlign: 'center' }}>▶</TableCell>
-                  <TableCell>{row.codigo}</TableCell>
-                  <TableCell>{row.producto}</TableCell>
-                  <TableCell align="center">{row.cantidad}</TableCell>
-                  <TableCell align="right">
+                  <TableCell sx={{ width: 34, textAlign: 'center', whiteSpace: 'nowrap' }}>▶</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.codigo}</TableCell>
+                  <TableCell sx={{ minWidth: 280, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                    {row.producto}
+                  </TableCell>
+                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>{row.cantidad}</TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     {Number(row.valorNeto || 0).toLocaleString('es-CL')}
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     {Number(row.dsctoValor || 0).toLocaleString('es-CL')}
                   </TableCell>
-                  <TableCell align="right">{row.dsctoPorc}</TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{row.dsctoPorc}</TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     {Number(row.totalNeto || 0).toLocaleString('es-CL')}
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     {Number(row.comision || 0).toLocaleString('es-CL')}
                   </TableCell>
                 </TableRow>

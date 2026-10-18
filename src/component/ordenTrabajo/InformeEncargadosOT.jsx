@@ -497,20 +497,34 @@ const normalizarCabecera = (objeto) => {
       ],
       ''
     ),
-    fechaEntrega: obtenerValor(
-      objeto,
-      [
-        'FechaEntrega',
-        'FechaRealEntrega',
-        'FechaEntregaOT',
-        'FechaEntregaCotizacionAprox',
-        'FechaEntregaCotizacion',
-        'FechaRealEntregaOT',
-        'FechaVencto',
-        'FechaVencimiento'
-      ],
-      ''
-    ),
+    fechaEntrega:
+      obtenerValor(
+        objeto,
+        [
+          'FechaEntrega',
+          'FechaEntregaOT',
+          'FechaVencto',
+          'FechaVencimiento'
+        ],
+        ''
+      ) ||
+      obtenerValor(
+        objeto,
+        [
+          'FechaEntregaCotizacionAprox',
+          'FechaEntregaCotizacionApprox',
+          'FechaEntregaCotizacion'
+        ],
+        ''
+      ) ||
+      obtenerValor(
+        objeto,
+        [
+          'FechaRealEntrega',
+          'FechaRealEntregaOT'
+        ],
+        ''
+      ),
     estado: String(
       obtenerValor(
         objeto,
